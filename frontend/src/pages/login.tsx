@@ -3,13 +3,12 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { useAuth } from '../context/AuthContent'
+import { useAuth } from '../context/AuthContext'
 import api from '../services/api'
 
 const schema = z.object({
   email:    z.string().email('Please enter a valid email'),
-  password: z.string().min(1, 'Password is required'),
-})
+  password: z.string().min(8, 'Password must be at least 8 characters'),})
 
 type FormData = z.infer<typeof schema>
 
