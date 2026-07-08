@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+*.env
+
+#local code used for assignment 2 only:
+/backend/src/controllers/auth.js
+/backend/src/routes/auth.js
