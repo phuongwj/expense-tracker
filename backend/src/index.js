@@ -20,6 +20,10 @@ app.use(express.json());
 app.use('/api/transactions', transactionRouter);
 app.use('/api/categories', categoryRouter);
 
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
