@@ -56,7 +56,7 @@ export default function SignUp() {
   return (
     <div className="min-h-screen flex">
       <div className="hidden lg:flex w-[420px] shrink-0 bg-[#2D5240] flex-col justify-between p-12">
-        <div className="text-3xl text-white font-bold">Foli<span className="text-[#7DC9A0]">o</span></div>
+        <div className="text-3xl text-white font-bold">Expense Tracker</div>
         <div>
           <h1 className="text-4xl font-light text-white leading-tight mb-4">
             Take control of your <strong>student finances</strong>
