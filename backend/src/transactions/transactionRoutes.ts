@@ -11,7 +11,7 @@ const router = express.Router()
 /**
  * GET /api/transactions/     Returns Personal Transactions for the user, optionally filtered by query parameters
  */
-router.get('/', getPersonal)
+router.get('/', validateQuery(getTransactionsSchema), getPersonal)
 
 /**
  * POST /api/transactions/    Creates a new Personal Transaction for the user
