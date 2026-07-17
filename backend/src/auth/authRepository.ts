@@ -95,3 +95,13 @@ export const revokeRefreshToken = async (id: string, replacedByTokenId?: string)
 
     await pool.query(query, [id, replacedByTokenId ?? null]);
 }
+
+export const revokeAllUserRefreshTokens = async (userId: string): Promise<void> => {
+    const query = `
+        UPDATE refresh_tokens
+        SET revoked_at = now()
+        WHERE user_id = $1 AND revoked_at IS NULL
+    `;
+
+    await pool.query(query, [userId]);
+}
