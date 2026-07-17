@@ -8,14 +8,32 @@ import {
     insertRefreshToken,
     findRefreshTokenByHash,
     revokeRefreshToken,
+    revokeAllUserRefreshTokens,
 } from "./authRepository.ts";
-import { SignupInput, LoginInput, RefreshTokenInput } from "./authSchemas.ts";
+import { SignupInput, LoginInput } from "./authSchemas.ts";
 import { toPublicUser } from "./authModel.ts";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 const SALT_ROUNDS = Number(process.env.SALT_ROUNDS) || 10;
 const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN || '15m') as SignOptions['expiresIn'];
 const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS) || 30;
+const COOKIE_NAME = 'refresh_token';
+
+/** Attaches the raw refresh token as an httpOnly cookie on the response. */
+const setRefreshCookie = (res: Response, token: string) => {
+  res.cookie(COOKIE_NAME, token, {
+    httpOnly: true,                                       //protects against XSS attacks by hiding cookie from client-side JS
+    secure: process.env.NODE_ENV === 'production',        // enforces HTTPS connections (set to false only in local development)
+    sameSite: 'strict',                                   // protects against Cross-Site Request Forgery (CSRF)
+    path: '/api/auth',                                    // only sent to auth routes
+    maxAge: REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000, // cookie lifespan
+  });
+};
+
+/** Removes the refresh-token cookie, used on logout and invalid-token paths. */
+const clearRefreshCookie = (res: Response) => {
+  res.clearCookie(COOKIE_NAME, { path: '/api/auth' });
+}
 
 /**
  * Hashes a raw refresh token for storage/lookup. We only ever persist the
@@ -60,11 +78,11 @@ export const signUp = async (req: Request<{}, {}, SignupInput>, res: Response) =
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
     const user = await createUser(firstName, lastName, email, passwordHash);
     const { accessToken, refreshToken } = await issueTokenPair(user.id);
+    setRefreshCookie(res, refreshToken);
 
     return res.status(201).json({
       message: 'Account created.',
       accessToken,
-      refreshToken,
       user: toPublicUser(user),
     });
   } catch (err) {
@@ -90,11 +108,11 @@ export const logIn = async (req: Request<{}, {}, LoginInput>, res: Response) => 
     }
 
     const { accessToken, refreshToken } = await issueTokenPair(user.id);
+    setRefreshCookie(res, refreshToken);
 
     return res.status(200).json({
       message: 'Logged in successfully.',
       accessToken,
-      refreshToken,
       user: toPublicUser(user),
     });
   } catch (err) {
@@ -107,22 +125,27 @@ export const logIn = async (req: Request<{}, {}, LoginInput>, res: Response) => 
  * POST /refresh
  * Rotates a refresh token: the presented token is revoked and replaced by a new pair.
  */
-export const refresh = async (req: Request<{}, {}, RefreshTokenInput>, res: Response) => {
-  const { refreshToken } = req.body;
+export const refresh = async (req: Request, res: Response) => {
+  const refreshToken = req.cookies?.[COOKIE_NAME];
+
+  if (!refreshToken) {
+    return res.status(401).json({ error: 'Invalid or expired refresh token.' });
+  }
 
   try {
     const existingToken = await findRefreshTokenByHash(hashToken(refreshToken));
 
     if (!existingToken || existingToken.revokedAt || existingToken.expiresAt.getTime() < Date.now()) {
+      clearRefreshCookie(res);
       return res.status(401).json({ error: 'Invalid or expired refresh token.' });
     }
 
     const issued = await issueTokenPair(existingToken.userId);
     await revokeRefreshToken(existingToken.id, issued.refreshTokenRecord.id);
+    setRefreshCookie(res, issued.refreshToken);
 
     return res.status(200).json({
       accessToken: issued.accessToken,
-      refreshToken: issued.refreshToken,
     });
   } catch (err) {
     console.error('Refresh error:', err);
@@ -134,16 +157,19 @@ export const refresh = async (req: Request<{}, {}, RefreshTokenInput>, res: Resp
  * POST /logout
  * Revokes the presented refresh token, ending that session.
  */
-export const logOut = async (req: Request<{}, {}, RefreshTokenInput>, res: Response) => {
-  const { refreshToken } = req.body;
+export const logOut = async (req: Request, res: Response) => {
+  const refreshToken = req.cookies?.[COOKIE_NAME];
 
   try {
-    const existingToken = await findRefreshTokenByHash(hashToken(refreshToken));
+    if (refreshToken) {
+      const existingToken = await findRefreshTokenByHash(hashToken(refreshToken));
 
-    if (existingToken && !existingToken.revokedAt) {
-      await revokeRefreshToken(existingToken.id);
+      if (existingToken) {
+        await revokeAllUserRefreshTokens(existingToken.userId);
+      }
     }
 
+    clearRefreshCookie(res);
     return res.status(200).json({ message: 'Logged out successfully.' });
   } catch (err) {
     console.error('Logout error:', err);
