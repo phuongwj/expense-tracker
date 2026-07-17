@@ -1,7 +1,7 @@
 export interface Transaction {
     id: string;
     userId: string;
-    groupId: string | null;
+    groupId: number | null; //temporary until Group Entity is added, then this will get changed to string | null
     paidBy: string | null;
     categoryId: string | null;
     type: 'expense' | 'income';

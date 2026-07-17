@@ -45,3 +45,40 @@ export const updateTransactionSchema = z.object({
 });
 
 export type UpdateTransactionInput = z.infer<typeof updateTransactionSchema>;
+
+export const createGroupTransactionSchema = z.object({
+    userId: z.string(), // TEMPORARY: workaround until req.userId can be extracted from jwt 
+    type: z.enum(['expense', 'income'], { message: "Transaction type must be either 'expense' or 'income'." }),
+    amount: z.number().positive("Transaction amount must be greater than zero."),
+    category_id: z.string().nullable().optional(),
+    transaction_date: z.iso.date("A valid transaction date is required."),
+    description: z.string().trim().max(255, "Transaction's description must be at most 255 characters.").nullable().optional(),
+    is_recurring: z.boolean().optional().default(false),
+    recurring_interval: z.enum(['daily', 'weekly', 'biweekly', 'monthly', 'yearly'], {
+        message: "Transaction's recurring interval must be one of: daily, weekly, biweekly, monthly, yearly."
+    }).nullable().optional(),
+    //paid_by defaults is optional, if not added it will be defaulted to userId 
+    paid_by: z.string().optional(),
+    splits: z.array(z.object({
+        userId: z.string(),
+        amount: z.number().positive("Split amount must be greater than zero.")
+    })).optional()
+});
+
+
+export type CreateGroupTransactionInput = z.infer<typeof createGroupTransactionSchema>;
+
+export const updateGroupTransactionSchema = z.object({
+    type: z.enum(['expense', 'income'], { message: "Transaction type must be either 'expense' or 'income'." }),
+    amount: z.number().positive("Transaction amount must be greater than zero."),
+    category_id: z.string().nullable().optional(),
+    transaction_date: z.iso.date("A valid transaction date is required."),
+    description: z.string().trim().max(255, "Transaction's description must be at most 255 characters.").nullable().optional(),
+    is_recurring: z.boolean(),
+    recurring_interval: z.enum(['daily', 'weekly', 'biweekly', 'monthly', 'yearly'], {
+        message: "Transaction's recurring interval must be one of: daily, weekly, biweekly, monthly, yearly."
+    }).nullable().optional()
+});
+
+
+export type UpdateGroupTransactionInput = z.infer<typeof updateGroupTransactionSchema>;
