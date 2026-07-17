@@ -55,7 +55,7 @@ router.post('/group/:groupId',  /*auth middleware() ,*/ validateBody(createGroup
 /*
 * PUT /api/transactions/group/:groupId/:id    Updates a group transaction. 
 */
-router.put('/group/:groupId/:id', /*auth middleware() ,*/ validateBody(updateTransactionSchema), updateGroup);     
+router.put('/group/:groupId/:id', /*auth middleware() ,*/ validateBody(updateGroupTransactionSchema), updateGroup);     
     
 /*
 * DELETE /api/transactions/group/:groupId/:id   Delete a group transaction.
