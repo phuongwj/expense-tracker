@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import AddTransactionModal from '../components/AddTransactionModal'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -7,6 +8,7 @@ import { transactions as initialTransactions } from '../data/mockData'
 const tabs = ['All', 'Expenses', 'Income', 'Recurring'] as const
 
 export default function Transactions() {
+  const navigate = useNavigate()
   const [addOpen, setAddOpen] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [tab, setTab] = useState<(typeof tabs)[number]>('All')
@@ -26,6 +28,12 @@ export default function Transactions() {
       title="Transactions"
       headerActions={
         <>
+          <button
+            onClick={() => navigate('/import-csv')}
+            className="h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700"
+          >
+            ↑ Import CSV
+          </button>
           <button className="h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700">
             ↓ Export CSV
           </button>

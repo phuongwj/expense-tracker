@@ -12,6 +12,7 @@ const navGroups = [{ to: '/groups', label: 'My Groups', icon: '👥' }]
 
 const navTools = [
   { to: '/smart-scan', label: 'Smart Scan', icon: '⌗' },
+  { to: '/import-csv', label: 'Import CSV', icon: '⇪' },
   { to: '/ai-insights', label: 'AI Insights', icon: '✦' },
   { to: '/help', label: 'Help & Support', icon: '?' },
 ]

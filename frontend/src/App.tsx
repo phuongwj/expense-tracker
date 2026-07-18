@@ -9,6 +9,7 @@ import Visualisation from './pages/Visualisation'
 import Groups from './pages/Groups'
 import GroupDetail from './pages/GroupDetail'
 import SmartScan from './pages/SmartScan'
+import ImportCsv from './pages/ImportCsv'
 import AIInsights from './pages/AIInsights'
 import Settings from './pages/Settings'
 import Help from './pages/Help'
@@ -36,6 +37,9 @@ export default function App() {
         } />
         <Route path="/smart-scan" element={
           <ProtectedRoute><SmartScan /></ProtectedRoute>
+        } />
+        <Route path="/import-csv" element={
+          <ProtectedRoute><ImportCsv /></ProtectedRoute>
         } />
         <Route path="/ai-insights" element={
           <ProtectedRoute><AIInsights /></ProtectedRoute>
