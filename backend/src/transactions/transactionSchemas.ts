@@ -82,3 +82,11 @@ export const updateGroupTransactionSchema = z.object({
 
 
 export type UpdateGroupTransactionInput = z.infer<typeof updateGroupTransactionSchema>;
+
+export const createSettlementSchema = z.object({
+    userId: z.string(), // TEMPORARY: this is id of the user being repaid — will come from req.userId once JWT typing is fixed
+    repayingUserId: z.string(),
+    amount: z.number().positive("Settlement amount must be greater than zero.")
+});
+
+export type CreateSettlementInput = z.infer<typeof createSettlementSchema>;
