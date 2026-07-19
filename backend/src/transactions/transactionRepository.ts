@@ -13,20 +13,20 @@ export const createPersonalTransaction = async (
     recurringInterval: string | null
 ): Promise<Transaction> => {
     const query = `
-        INSERT INTO transactions (user_id, amount, type, category_id, transaction_date, description, is_recurring, recurring_interval)
+        INSERT INTO transactions (userId, amount, type, categoryId, transactionDate, description, isRecurring, recurringInterval)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING
             id,
-            user_id AS "userId",
-            group_id AS "groupId",
-            paid_by AS "paidBy",
-            category_id AS "categoryId",
+            userId,
+            groupId,
+            paidBy,
+            categoryId,
             type,
             amount,
-            transaction_date AS "transactionDate",
+            transactionDate ,
             description,
-            is_recurring AS "isRecurring",
-            recurring_interval AS "recurringInterval"
+            isRecurring,
+            recurringInterval
     `;
 
     const result = await pool.query(query, [userId, amount, type, categoryId, transactionDate, description, isRecurring, recurringInterval]);
@@ -48,19 +48,19 @@ export const getPersonalTransactions = async (
     let query = `
         SELECT
             id,
-            user_id AS "userId",
-            group_id AS "groupId",
-            paid_by AS "paidBy",
-            category_id AS "categoryId",
+            userId,
+            groupId,
+            paidBy,
+            categoryId,
             type,
             amount,
-            transaction_date AS "transactionDate",
+            transactionDate,
             description,
-            is_recurring AS "isRecurring",
-            recurring_interval AS "recurringInterval"
+            isRecurring,
+            recurringInterval
         FROM transactions
-        WHERE user_id = $1
-        AND group_id IS NULL
+        WHERE userId = $1
+        AND groupId IS NULL
     `;
 
     //params array will contain the different type values passed in the query params
@@ -70,11 +70,11 @@ export const getPersonalTransactions = async (
 
     if (filters.startDate) {
          //the string `$${params.length+1}` gives the properly formatted sql placeholder. ex: $1, $2, $3 etc. 
-        query += ` AND transaction_date >= $${params.length + 1}`;
+        query += ` AND transactionDate >= $${params.length + 1}`;
         params.push(filters.startDate);
     }
     if (filters.endDate) {
-        query += ` AND transaction_date <= $${params.length + 1}`;
+        query += ` AND transactionDate <= $${params.length + 1}`;
         params.push(filters.endDate);
     }
     if (filters.type) {
@@ -82,22 +82,22 @@ export const getPersonalTransactions = async (
         params.push(filters.type);
     }
     if (filters.categoryId) {
-        query += ` AND category_id = $${params.length + 1}`;
+        query += ` AND categoryId = $${params.length + 1}`;
         params.push(filters.categoryId);
     }
     if (filters.isRecurring !== undefined) {
-        query += ` AND is_recurring = $${params.length + 1}`;
+        query += ` AND isRecurring = $${params.length + 1}`;
         params.push(filters.isRecurring);
     }
     if (filters.recurringInterval) {
-        query += ` AND recurring_interval = $${params.length + 1}`;
+        query += ` AND recurringInterval = $${params.length + 1}`;
         params.push(filters.recurringInterval);
     }
     if (!filters.startDate && !filters.endDate) {
-        query += ` AND transaction_date >= NOW() - INTERVAL '30 days'`;
+        query += ` AND transactionDate >= NOW() - INTERVAL '30 days'`;
     }
 
-    query += ` ORDER BY transaction_date DESC`;
+    query += ` ORDER BY transactionDate DESC`;
 
     const result = await pool.query(query, params);
     return result.rows;
@@ -116,21 +116,22 @@ export const updatePersonalTransaction = async (
 ): Promise<Transaction | null> => {
     const query = `
         UPDATE transactions
-        SET amount = $1, type = $2, category_id = $3, transaction_date = $4,
-            description = $5, is_recurring = $6, recurring_interval = $7
-        WHERE id = $8 AND user_id = $9 AND group_id IS NULL
+        SET amount = $1, type = $2, categoryId = $3, transactionDate = $4,
+            description = $5, isRecurring = $6, recurringInterval = $7,
+            updated_at = now()
+        WHERE id = $8 AND userId = $9 AND groupId IS NULL
         RETURNING
             id,
-            user_id AS "userId",
-            group_id AS "groupId",
-            paid_by AS "paidBy",
-            category_id AS "categoryId",
+            userId,
+            groupId,
+            paidBy,
+            categoryId,
             type,
             amount,
-            transaction_date AS "transactionDate",
+            transactionDate,
             description,
-            is_recurring AS "isRecurring",
-            recurring_interval AS "recurringInterval"
+            isRecurring,
+            recurringInterval
     `;
 
     const result = await pool.query(query, [amount, type, categoryId, transactionDate, description, isRecurring, recurringInterval, transactionId, userId]);
@@ -141,7 +142,7 @@ export const updatePersonalTransaction = async (
 export const deletePersonalTransaction = async (transactionId: string, userId: string): Promise<boolean> => {
     const query = `
         DELETE FROM transactions
-        WHERE id = $1 AND user_id = $2 AND group_id IS NULL
+        WHERE id = $1 AND userId = $2 AND groupId IS NULL
     `;
 
     const result = await pool.query(query, [transactionId, userId]);

@@ -1,7 +1,7 @@
 import express from 'express'
 import { createPersonal, getPersonal, updatePersonal, deletePersonal } from "./transactionController.ts"
-import { validateBody, validateQuery } from "../middleware/validateRequest.ts"
-import { createTransactionSchema, getTransactionsSchema, updateTransactionSchema } from "./transactionSchemas.ts"
+import { validateBody, validateQuery, validateParams } from "../middleware/validateRequest.ts"
+import { createTransactionSchema, getTransactionsSchema, updateTransactionSchema, deleteTransactionSchema } from "./transactionSchemas.ts"
 
 const router = express.Router()
 
@@ -26,6 +26,6 @@ router.put('/:id', validateBody(updateTransactionSchema), updatePersonal)
 /**
  * DELETE /api/transactions/:id    Deletes the user's Personal Transaction with the given ID
  */
-router.delete('/:id', deletePersonal)
+router.delete('/:id', validateParams(deleteTransactionSchema), deletePersonal)
 
 export default router

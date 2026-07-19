@@ -5,6 +5,7 @@ CREATE TABLE categories (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR(100) NOT NULL,
   user_id UUID REFERENCES users(id), -- user_id is null for the default pre-defined categories 
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (user_id, name)
 );
 
@@ -23,6 +24,8 @@ CREATE TABLE transactions (
   description VARCHAR(255),
   is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
   recurring_interval VARCHAR(20) CHECK (recurring_interval IN ('daily', 'weekly', 'biweekly', 'monthly', 'yearly')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT valid_transaction_type CHECK (
     -- paid_by can only be null if group_id is null, make paid_by required for group and not allowed for personal
     (group_id IS NULL AND paid_by IS NULL) OR
@@ -40,3 +43,7 @@ CREATE TABLE transaction_splits (
 );
 
 -- Down Migration
+
+DROP TABLE IF EXISTS transaction_splits;
+DROP TABLE IF EXISTS transactions;
+DROP TABLE IF EXISTS categories;

@@ -15,18 +15,18 @@ export const createPersonal = async (req: Request<{}, {}, CreateTransactionInput
     //const userId = req.userId; todo: investigate issue with being unable to use JWT via middleware 
 
     /**Note: Temporarily adding userId via req body until JWT issue is solved */
-    const { userId, type, amount, category_id, transaction_date, description, is_recurring, recurring_interval } = req.body;
+    const { userId, type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval } = req.body;
     
     try {
         const transaction = await createPersonalTransaction(
             userId,
             type,
             amount,
-            category_id ?? null,
-            transaction_date,
+            categoryId ?? null,
+            transactionDate,
             description ?? null,
-            is_recurring,
-            is_recurring ? recurring_interval ?? null : null
+            isRecurring,
+            isRecurring ? recurringInterval ?? null : null
         );
 
         return res.status(201).json(transaction);
@@ -62,7 +62,7 @@ export const updatePersonal = async (req: Request<{ id: string }, {}, UpdateTran
     
     const { id } = req.params;
     //userID is temporarily part of body until JWT issue is resolved.
-    const { userId, type, amount, category_id, transaction_date, description, is_recurring, recurring_interval } = req.body;
+    const { userId, type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval } = req.body;
 
     try {
         const transaction = await updatePersonalTransaction(
@@ -70,11 +70,11 @@ export const updatePersonal = async (req: Request<{ id: string }, {}, UpdateTran
             userId,
             amount,
             type,
-            category_id ?? null,
-            transaction_date,
+            categoryId ?? null,
+            transactionDate,
             description ?? null,
-            is_recurring,
-            is_recurring ? recurring_interval ?? null : null
+            isRecurring,
+            isRecurring ? recurringInterval ?? null : null
         );
 
         if (!transaction) {
