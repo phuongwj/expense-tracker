@@ -40,3 +40,7 @@ CREATE TABLE transaction_splits (
 );
 
 -- Down Migration
+
+DROP TABLE IF EXISTS transaction_splits;
+DROP TABLE IF EXISTS transactions;
+DROP TABLE IF EXISTS categories;
