@@ -34,6 +34,36 @@ The split keeps responsibilities clear:
 - **Schemas** define and validate the shape of incoming data.
 - **Models** hold the shared TypeScript types for that feature.
 
+
+### How the layers work together
+
+Every feature in the backend follows the same five-layer pattern. A request enters at the top and flows down; the response flows back up.
+
+```
+Routes -> Schema -> Controller -> Repository -> Model
+```
+
+**1. Routes**
+
+**Wiring**. Maps HTTP methods and paths to handlers. Attaches middleware (see `backend/src/middleware/authMiddleware.ts`) like `validateBody()` or `requireAuth`.
+
+**2. Schema**
+
+**Validation**. Zod schemas define what shape the request body must be. If it fails, the middleware returns 400 before the controller ever runs. Also exports TypeScript types via `z.infer<>`.
+
+**3. Controller**
+
+**Business logic**. The handler function. Reads validated input, calls repository functions, decides what status code to return. Each handler is wrapped in try/catch.
+
+**4.Repository**
+
+**Database access**. Raw SQL with parameterized queries (`$1`, `$2`). This is where snake_case columns get aliased to camelCase with `AS "camelCase"`.
+
+**5. Model**
+
+**Type definitions**. TypeScript interfaces that describe the shape of data in the app. The repository returns these types, the controller works with them.
+
+
 ## Database migrations
 
 We use [node-pg-migrate](https://github.com/salsita/node-pg-migrate) to manage database schema changes. Instead of modifying tables by hand, every change is a timestamped SQL file in `backend/migrations/`. Migrations run in order, so anyone can spin up the same database from scratch.
