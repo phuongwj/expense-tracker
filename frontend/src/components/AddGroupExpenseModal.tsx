@@ -12,32 +12,72 @@ export default function AddGroupExpenseModal({
   group: Group
 }) {
   const [split, setSplit] = useState<'equal' | 'custom'>('equal')
-  const total = 181.2
-  const share = total / group.members.length
+  const [totalAmount, setTotalAmount] = useState('')
+  const [description, setDescription] = useState('')
+  const [paidBy, setPaidBy] = useState('')
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+
+  const total = parseFloat(totalAmount) || 0
+  const memberCount = group.members.filter((m) => m.initials !== '+1').length
+  const share = memberCount > 0 ? total / memberCount : 0
+
+  const handleClose = () => {
+    setSplit('equal')
+    setTotalAmount('')
+    setDescription('')
+    setPaidBy('')
+    setDate(new Date().toISOString().slice(0, 10))
+    onClose()
+  }
 
   return (
-    <Modal open={open} onClose={onClose} title="Add group expense">
+    <Modal open={open} onClose={handleClose} title="Add group expense">
       <p className="text-xs text-gray-400 mb-5">
         Fields marked <span className="text-red-500">*</span> are required.
       </p>
 
-      <Field label="Total amount *">
-        <input defaultValue={`$${total.toFixed(2)}`} className="input" />
+      <Field label="Total amount *" htmlFor="ge-total">
+        <input
+          id="ge-total"
+          value={totalAmount}
+          onChange={(e) => setTotalAmount(e.target.value)}
+          placeholder="0.00"
+          className="input"
+        />
       </Field>
-      <Field label="Description *">
-        <input placeholder="e.g. Costco groceries" className="input" />
+      <Field label="Description *" htmlFor="ge-description">
+        <input
+          id="ge-description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="e.g. Costco groceries"
+          className="input"
+        />
       </Field>
-      <Field label="Paid by *">
-        <input placeholder="Who paid?" className="input" />
+      <Field label="Paid by *" htmlFor="ge-paidby">
+        <input
+          id="ge-paidby"
+          value={paidBy}
+          onChange={(e) => setPaidBy(e.target.value)}
+          placeholder="Who paid?"
+          className="input"
+        />
       </Field>
-      <Field label="Date *">
-        <input placeholder="May 8, 2026" className="input" />
+      <Field label="Date *" htmlFor="ge-date">
+        <input
+          id="ge-date"
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="input"
+        />
       </Field>
 
       <div className="mb-4">
-        <label className="label">Split method</label>
-        <div className="grid grid-cols-2 gap-2">
+        <label className="label" id="ge-split-label">Split method</label>
+        <div className="grid grid-cols-2 gap-2" role="group" aria-labelledby="ge-split-label">
           <button
+            type="button"
             onClick={() => setSplit('equal')}
             className={`h-10 rounded-xl text-sm font-semibold border ${
               split === 'equal' ? 'bg-red-50 border-red-300 text-red-700' : 'border-gray-200 text-gray-500'
@@ -46,6 +86,7 @@ export default function AddGroupExpenseModal({
             ⇄ Equal split
           </button>
           <button
+            type="button"
             onClick={() => setSplit('custom')}
             className={`h-10 rounded-xl text-sm font-semibold border ${
               split === 'custom' ? 'bg-[#EDF4EE] border-[#3D6B4F] text-[#2D5240]' : 'border-gray-200 text-gray-500'
@@ -72,16 +113,16 @@ export default function AddGroupExpenseModal({
 
       <div className="flex items-center justify-between bg-green-50 text-green-800 rounded-xl px-4 py-2.5 mb-6 text-sm font-medium">
         <span>
-          Total: ${total.toFixed(2)} / ${total.toFixed(2)}
+          Total: ${(share * memberCount).toFixed(2)} / ${total.toFixed(2)}
         </span>
         <span>✓ Balanced</span>
       </div>
 
       <div className="flex gap-3">
-        <button onClick={onClose} className="flex-1 h-11 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">
+        <button onClick={handleClose} className="flex-1 h-11 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">
           Cancel
         </button>
-        <button onClick={onClose} className="flex-1 h-11 rounded-xl bg-[#3D6B4F] text-white text-sm font-semibold hover:bg-[#2D5240]">
+        <button onClick={handleClose} className="flex-1 h-11 rounded-xl bg-[#3D6B4F] text-white text-sm font-semibold hover:bg-[#2D5240]">
           Save group expense
         </button>
       </div>
@@ -95,10 +136,10 @@ export default function AddGroupExpenseModal({
   )
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, htmlFor, children }: { label: string; htmlFor: string; children: React.ReactNode }) {
   return (
     <div className="mb-4">
-      <label className="label">{label}</label>
+      <label className="label" htmlFor={htmlFor}>{label}</label>
       {children}
     </div>
   )

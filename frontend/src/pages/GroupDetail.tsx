@@ -86,7 +86,7 @@ export default function GroupDetail() {
         <div className="divide-y divide-gray-100">
           {group.members
             .filter((m) => m.name !== 'Alex Chen' && m.initials !== '+1')
-            .map((m, i) => (
+            .map((m) => (
               <div key={m.id} className="flex items-center justify-between py-3">
                 <div className="flex items-center gap-3">
                   <div
@@ -97,8 +97,16 @@ export default function GroupDetail() {
                   </div>
                   <span className="text-sm text-gray-800">{m.name}</span>
                 </div>
-                <span className={`text-sm font-semibold ${i === 0 ? 'text-red-700' : i === 1 ? 'text-green-700' : 'text-gray-400'}`}>
-                  {i === 0 ? `You owe $${Math.abs(group.balanceAmount).toFixed(2)}` : i === 1 ? 'Owes you $22.10' : 'Settled ✓'}
+                <span
+                  className={`text-sm font-semibold ${
+                    (m.balance ?? 0) < 0 ? 'text-red-700' : (m.balance ?? 0) > 0 ? 'text-green-700' : 'text-gray-400'
+                  }`}
+                >
+                  {(m.balance ?? 0) < 0
+                    ? `You owe $${Math.abs(m.balance ?? 0).toFixed(2)}`
+                    : (m.balance ?? 0) > 0
+                    ? `Owes you $${(m.balance ?? 0).toFixed(2)}`
+                    : 'Settled ✓'}
                 </span>
               </div>
             ))}

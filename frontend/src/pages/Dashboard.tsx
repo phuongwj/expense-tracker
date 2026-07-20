@@ -6,6 +6,7 @@ import { transactions, groups } from '../data/mockData'
 
 export default function Dashboard() {
   const [addOpen, setAddOpen] = useState(false)
+  const [view, setView] = useState('personal')
   const recent = transactions.slice(0, 5)
 
   return (
@@ -13,8 +14,17 @@ export default function Dashboard() {
       title="Dashboard"
       headerActions={
         <>
-          <select className="h-9 border border-gray-200 rounded-lg px-3 text-sm bg-white text-gray-700">
-            <option>📍 Personal View</option>
+          <select
+            value={view}
+            onChange={(e) => setView(e.target.value)}
+            className="h-9 border border-gray-200 rounded-lg px-3 text-sm bg-white text-gray-700"
+          >
+            <option value="personal">📍 Personal View</option>
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>
+                👥 {g.name}
+              </option>
+            ))}
           </select>
           <button className="w-9 h-9 rounded-lg bg-white border border-gray-200 flex items-center justify-center">🔔</button>
           <button
@@ -82,8 +92,8 @@ export default function Dashboard() {
               >
                 {g.balanceAmount === 0 ? 'All settled ✓' : g.balanceLabel}
               </div>
-              {g.balanceAmount < 0 && <div className="text-xs text-gray-400">to Jordan Lee</div>}
-              {g.balanceAmount > 0 && <div className="text-xs text-gray-400">from Tina Nguyen</div>}
+              {g.balanceAmount < 0 && g.counterparty && <div className="text-xs text-gray-400">to {g.counterparty}</div>}
+              {g.balanceAmount > 0 && g.counterparty && <div className="text-xs text-gray-400">from {g.counterparty}</div>}
             </div>
           ))}
         </div>

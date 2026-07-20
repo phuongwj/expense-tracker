@@ -30,11 +30,12 @@ export interface Group {
   id: string
   name: string
   icon: string
-  members: { id: string; initials: string; name: string; role?: string; color: string }[]
+  members: { id: string; initials: string; name: string; role?: string; color: string; balance?: number }[]
   transactionCount: number
   lastActive: string
   balanceLabel: string
   balanceAmount: number // positive = owed to you, negative = you owe, 0 = settled
+  counterparty?: string // who you owe / who owes you, for display
 }
 
 export const groups: Group[] = [
@@ -44,14 +45,15 @@ export const groups: Group[] = [
     icon: '🏢',
     members: [
       { id: 'ac', initials: 'AC', name: 'Alex Chen', role: 'Admin', color: '#2D5240' },
-      { id: 'jl', initials: 'JL', name: 'Jordan Lee', color: '#7C5CBF' },
-      { id: 'mk', initials: 'MK', name: 'Maya Kim', color: '#C99A3B' },
-      { id: 'sr', initials: 'SR', name: 'Sam Roy', color: '#B14B4B' },
+      { id: 'jl', initials: 'JL', name: 'Jordan Lee', color: '#7C5CBF', balance: -45.3 },
+      { id: 'mk', initials: 'MK', name: 'Maya Kim', color: '#C99A3B', balance: 22.1 },
+      { id: 'sr', initials: 'SR', name: 'Sam Roy', color: '#B14B4B', balance: 0 },
     ],
     transactionCount: 8,
     lastActive: 'today',
     balanceLabel: 'You owe $45.30',
     balanceAmount: -45.3,
+    counterparty: 'Jordan Lee',
   },
   {
     id: 'g2',
@@ -59,13 +61,14 @@ export const groups: Group[] = [
     icon: '🎓',
     members: [
       { id: 'ac', initials: 'AC', name: 'Alex Chen', color: '#2D5240' },
-      { id: 'jl', initials: 'JL', name: 'Jordan Lee', color: '#7C5CBF' },
-      { id: 'tn', initials: 'TN', name: 'Tina Nguyen', color: '#2F7A8C' },
+      { id: 'jl', initials: 'JL', name: 'Jordan Lee', color: '#7C5CBF', balance: 0 },
+      { id: 'tn', initials: 'TN', name: 'Tina Nguyen', color: '#2F7A8C', balance: 12.0 },
     ],
     transactionCount: 3,
     lastActive: 'May 7',
     balanceLabel: 'Owed $12.00',
     balanceAmount: 12.0,
+    counterparty: 'Tina Nguyen',
   },
   {
     id: 'g3',
@@ -73,10 +76,10 @@ export const groups: Group[] = [
     icon: '🎉',
     members: [
       { id: 'ac', initials: 'AC', name: 'Alex Chen', color: '#2D5240' },
-      { id: 'jl', initials: 'JL', name: 'Jordan Lee', color: '#7C5CBF' },
-      { id: 'mk', initials: 'MK', name: 'Maya Kim', color: '#C99A3B' },
-      { id: 'sr', initials: 'SR', name: 'Sam Roy', color: '#B14B4B' },
-      { id: 'x', initials: '+1', name: 'and 1 more', color: '#8A8A80' },
+      { id: 'jl', initials: 'JL', name: 'Jordan Lee', color: '#7C5CBF', balance: 0 },
+      { id: 'mk', initials: 'MK', name: 'Maya Kim', color: '#C99A3B', balance: 0 },
+      { id: 'sr', initials: 'SR', name: 'Sam Roy', color: '#B14B4B', balance: 0 },
+      { id: 'x', initials: '+1', name: 'and 1 more', color: '#8A8A80', balance: 0 },
     ],
     transactionCount: 12,
     lastActive: 'Apr 28',
