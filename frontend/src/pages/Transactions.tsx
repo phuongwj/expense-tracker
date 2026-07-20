@@ -34,7 +34,10 @@ export default function Transactions() {
           >
             ↑ Import CSV
           </button>
-          <button className="h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700">
+          <button
+            onClick={() => navigate('/export')}
+            className="h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700"
+          >
             ↓ Export CSV
           </button>
           <button
