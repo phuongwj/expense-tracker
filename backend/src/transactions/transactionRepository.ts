@@ -118,7 +118,7 @@ export const updatePersonalTransaction = async (
         UPDATE transactions
         SET amount = $1, type = $2, categoryId = $3, transactionDate = $4,
             description = $5, isRecurring = $6, recurringInterval = $7,
-            updated_at = now()
+            updatedAt = now()
         WHERE id = $8 AND userId = $9 AND groupId IS NULL
         RETURNING
             id,
