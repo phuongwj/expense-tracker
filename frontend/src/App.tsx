@@ -50,4 +50,12 @@ export default function App() {
         } />
         <Route path="/settings" element={
           <ProtectedRoute><Settings /></ProtectedRoute>
- 
+        } />
+        <Route path="/help" element={
+          <ProtectedRoute><Help /></ProtectedRoute>
+        } />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </AuthProvider>
+  )
+}
