@@ -23,7 +23,7 @@ export const createPersonalTransaction = async (
             category_id AS "categoryId",
             type,
             amount,
-            transaction_date AS "transactionDate",
+            transaction_date AS "transactionDate" ,
             description,
             is_recurring AS "isRecurring",
             recurring_interval AS "recurringInterval"
@@ -117,7 +117,8 @@ export const updatePersonalTransaction = async (
     const query = `
         UPDATE transactions
         SET amount = $1, type = $2, category_id = $3, transaction_date = $4,
-            description = $5, is_recurring = $6, recurring_interval = $7
+            description = $5, is_recurring = $6, recurring_interval = $7,
+            updated_at = now()
         WHERE id = $8 AND user_id = $9 AND group_id IS NULL
         RETURNING
             id,
