@@ -1,5 +1,5 @@
 import pool from "../config/db.ts";
-import { User, PublicUser, RefreshToken } from "./authModel.ts";
+import { User, PublicUser, RefreshToken, PasswordResetToken } from "./authModel.ts";
 
 /**
  * Finds a user by their email address.
@@ -104,4 +104,75 @@ export const revokeAllUserRefreshTokens = async (userId: string): Promise<void> 
     `;
 
     await pool.query(query, [userId]);
+}
+
+export const findUserById = async (userId: string): Promise<PublicUser | null> => {
+    const query = `
+        SELECT id, first_name AS "firstName", last_name AS "lastName", email
+        FROM users
+        WHERE id = $1
+    `;
+
+    const result = await pool.query(query, [userId]);
+    return result.rows[0] || null;
+}
+
+export const insertPasswordResetToken = async (
+    userId: string,
+    tokenHash: string,
+    expiresAt: Date
+): Promise<PasswordResetToken> => {
+    const query = `
+        INSERT INTO password_reset_tokens (user_id, code_hash, expires_at)
+        VALUES ($1, $2, $3)
+        RETURNING id, user_id AS "userId", code_hash AS "codeHash",
+                  expires_at AS "expiresAt", used_at AS "usedAt", attempts, created_at AS "createdAt"
+    `;
+
+    const result = await pool.query(query, [userId, tokenHash, expiresAt]);
+    return result.rows[0];
+}
+
+export const findActiveResetTokenByUser = async (userId: string): Promise<PasswordResetToken | null> => {
+    const query = `
+        SELECT id, user_id AS "userId", code_hash AS "codeHash",
+               expires_at AS "expiresAt", used_at AS "usedAt", attempts, created_at AS "createdAt"
+        FROM password_reset_tokens
+        WHERE user_id = $1 AND used_at IS NULL AND expires_at > now()
+        ORDER BY created_at DESC
+        LIMIT 1
+    `;
+
+    const result = await pool.query(query, [userId]);
+    return result.rows[0] || null;
+}
+
+export const incrementResetTokenAttempts = async (tokenId: string): Promise<void> => {
+    const query = `
+        UPDATE password_reset_tokens
+        SET attempts = attempts + 1
+        WHERE id = $1
+    `;
+
+    await pool.query(query, [tokenId]);
+}
+
+export const markAllUserResetTokensUsed = async (userId: string): Promise<void> => {
+    const query = `
+        UPDATE password_reset_tokens
+        SET used_at = now()
+        WHERE user_id = $1 AND used_at IS NULL
+    `;
+
+    await pool.query(query, [userId]);
+}
+
+export const updateUserPassword = async (userId: string, passwordHash: string): Promise<void> => {
+    const query = `
+        UPDATE users
+        SET password_hash = $1, updated_at = now()
+        WHERE id = $2
+    `;
+
+    await pool.query(query, [passwordHash, userId]);
 }
