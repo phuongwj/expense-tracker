@@ -13,20 +13,20 @@ export const createPersonalTransaction = async (
     recurringInterval: string | null
 ): Promise<Transaction> => {
     const query = `
-        INSERT INTO transactions (userId, amount, type, categoryId, transactionDate, description, isRecurring, recurringInterval)
+        INSERT INTO transactions (user_id, amount, type, category_id, transaction_date, description, is_recurring, recurring_interval)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING
             id,
-            user_id AS userId,
-            group_id AS groupId,
-            paid_by AS paidBy,
-            category_id AS categoryId,
+            user_id AS "userId",
+            group_id AS "groupId",
+            paid_by AS "paidBy",
+            category_id AS "categoryId",
             type,
             amount,
-            transaction_date AS transactionDate ,
+            transaction_date AS "transactionDate" ,
             description,
-            is_recurring AS isRecurring,
-            recurring_interval AS recurringInterval
+            is_recurring AS "isRecurring",
+            recurring_interval AS "recurringInterval"
     `;
 
     const result = await pool.query(query, [userId, amount, type, categoryId, transactionDate, description, isRecurring, recurringInterval]);
@@ -48,16 +48,16 @@ export const getPersonalTransactions = async (
     let query = `
         SELECT
             id,
-            user_id AS userId,
-            group_id AS groupId,
-            paid_by AS paidBy,
-            category_id AS categoryId,
+            user_id AS "userId",
+            group_id AS "groupId",
+            paid_by AS "paidBy",
+            category_id AS "categoryId",
             type,
             amount,
-            transaction_date AS transactionDate,
+            transaction_date AS "transactionDate",
             description,
-            is_recurring AS isRecurring,
-            recurring_interval AS recurringInterval
+            is_recurring AS "isRecurring",
+            recurring_interval AS "recurringInterval"
         FROM transactions
         WHERE user_id = $1
         AND group_id IS NULL
@@ -122,16 +122,16 @@ export const updatePersonalTransaction = async (
         WHERE id = $8 AND user_id = $9 AND group_id IS NULL
         RETURNING
             id,
-            user_id AS userId,
-            group_id AS groupId,
-            paid_by AS paidBy,
-            category_id AS categoryId,
+            user_id AS "userId",
+            group_id AS "groupId",
+            paid_by AS "paidBy",
+            category_id AS "categoryId",
             type,
             amount,
-            transaction_date AS transactionDate,
+            transaction_date AS "transactionDate",
             description,
-            is_recurring AS isRecurring,
-            recurring_interval AS recurringInterval
+            is_recurring AS "isRecurring",
+            recurring_interval AS "recurringInterval"
     `;
 
     const result = await pool.query(query, [amount, type, categoryId, transactionDate, description, isRecurring, recurringInterval, transactionId, userId]);
