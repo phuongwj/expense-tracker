@@ -27,6 +27,10 @@ expense-tracker/
 
 Each backend feature gets its own folder under `src/` and follows the same file naming pattern: `<feature>Routes.ts`, `<feature>Controller.ts`, `<feature>Repository.ts`, `<feature>Schemas.ts`, `<feature>Model.ts`. For example, a transactions feature would live in `src/transactions/` with `transactionRoutes.ts`, `transactionController.ts`, and so on.
 
+The AI/OCR integration follows the same pattern in `backend/src/ai/`. The current backend AI endpoints are:
+- `POST /api/ai/insights`
+- `POST /api/ai/extract-receipt`
+
 The split keeps responsibilities clear:
 - **Routes** wire URLs to middleware and controller functions.
 - **Controllers** handle request/response logic and orchestrate calls.
