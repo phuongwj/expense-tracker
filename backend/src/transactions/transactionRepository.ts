@@ -52,6 +52,7 @@ export const getPersonalTransactions = async (
             group_id AS "groupId",
             paid_by AS "paidBy",
             category_id AS "categoryId",
+            categories.name AS "category",
             type,
             amount,
             transaction_date AS "transactionDate",
@@ -59,6 +60,8 @@ export const getPersonalTransactions = async (
             is_recurring AS "isRecurring",
             recurring_interval AS "recurringInterval"
         FROM transactions
+        LEFT JOIN categories 
+        ON transactions.category_id = categories.id
         WHERE user_id = $1
         AND group_id IS NULL
     `;
@@ -229,6 +232,7 @@ export const getGroupTransactions = async (
             group_id AS "groupId",
             paid_by AS "paidBy",
             category_id AS "categoryId",
+            categories.name AS "category",
             type,
             amount,
             transaction_date AS "transactionDate",
@@ -236,6 +240,8 @@ export const getGroupTransactions = async (
             is_recurring AS "isRecurring",
             recurring_interval AS "recurringInterval"
         FROM transactions
+        LEFT JOIN categories
+        ON transactions.category_id = categories.id
         WHERE group_id = $1
     `;
 
