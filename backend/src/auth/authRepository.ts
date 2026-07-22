@@ -119,7 +119,7 @@ export const findUserById = async (userId: string): Promise<PublicUser | null> =
 
 export const insertPasswordResetToken = async (
     userId: string,
-    tokenHash: string,
+    codeHash: string,
     expiresAt: Date
 ): Promise<PasswordResetToken> => {
     const query = `
@@ -129,7 +129,7 @@ export const insertPasswordResetToken = async (
                   expires_at AS "expiresAt", used_at AS "usedAt", attempts, created_at AS "createdAt"
     `;
 
-    const result = await pool.query(query, [userId, tokenHash, expiresAt]);
+    const result = await pool.query(query, [userId, codeHash, expiresAt]);
     return result.rows[0];
 }
 
