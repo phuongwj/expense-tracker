@@ -119,10 +119,10 @@ export const deletePersonal = async (req: Request<{ id: string }, {}, {}>, res: 
  * Creates a new group transaction, optionally with splits.
  */
 export const createGroup = async (req: Request<{ groupId: string }, {}, CreateGroupTransactionInput>, res: Response) => {
+    const userId = req.userId!;
     const groupId = Number(req.params.groupId);
-    const { userId, type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval, paidBy, splits } = req.body;
+    const { type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval, paidBy, splits } = req.body;
 
-    //paidBy can be a different user's ID, but default assumption is the person creating the transaction paid for it
     const payer = paidBy ?? userId;
 
     try {

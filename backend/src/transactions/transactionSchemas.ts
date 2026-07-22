@@ -43,7 +43,6 @@ export const deleteTransactionSchema = z.object({
 export type TransactionIdParam = z.infer<typeof deleteTransactionSchema>;
 
 export const createGroupTransactionSchema = z.object({
-    userId: z.string(), // TEMPORARY: workaround until req.userId can be extracted from jwt 
     type: z.enum(['expense', 'income'], { message: "Transaction type must be either 'expense' or 'income'." }),
     amount: z.number().positive("Transaction amount must be greater than zero."),
     categoryId: z.string().nullable().optional(),

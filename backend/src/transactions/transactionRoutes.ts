@@ -37,29 +37,24 @@ router.delete('/:id', requireAuth, validateParams(deleteTransactionSchema), dele
 
 //  ##### Group Transaction Routes #####
 
-//IMPORTANT: re-add middleware for user auth once issue with extracting user from jwt is solved
-
-
 /**
  * GET /api/transactions/group/:groupId     Returns Group Transactions for the given group, optionally filtered by query parameters
  */
-router.get('/group/:groupId', /*auth middleware() ,*/ validateQuery(getTransactionsSchema), getGroup);
+router.get('/group/:groupId', requireAuth, validateQuery(getTransactionsSchema), getGroup);
 
+/**
+ * POST /api/transactions/group/:groupId    Creates a new Group Transaction for the given group
+ */
+router.post('/group/:groupId', requireAuth, validateBody(createGroupTransactionSchema), createGroup);
 
-/*
-* POST /api/transactions/group/:groupId    Creates a new Group Transaction for the given group
-*/
+/**
+ * PUT /api/transactions/group/:groupId/:id    Updates a group transaction.
+ */
+router.put('/group/:groupId/:id', requireAuth, validateBody(updateGroupTransactionSchema), updateGroup);
 
-router.post('/group/:groupId',  /*auth middleware() ,*/ validateBody(createGroupTransactionSchema), createGroup);
-
-/*
-* PUT /api/transactions/group/:groupId/:id    Updates a group transaction. 
-*/
-router.put('/group/:groupId/:id', /*auth middleware() ,*/ validateBody(updateGroupTransactionSchema), updateGroup);     
-    
-/*
-* DELETE /api/transactions/group/:groupId/:id   Delete a group transaction.
-*/
-router.delete('/group/:groupId/:id', /*auth middleware() ,*/ deleteGroup);
+/**
+ * DELETE /api/transactions/group/:groupId/:id   Delete a group transaction.
+ */
+router.delete('/group/:groupId/:id', requireAuth, deleteGroup);
 
 export default router
