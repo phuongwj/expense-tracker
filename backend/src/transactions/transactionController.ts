@@ -126,10 +126,10 @@ export const deletePersonal = async (req: Request<{ id: string }, {}, {}>, res: 
  */
 export const createGroup = async (req: Request<{ groupId: string }, {}, CreateGroupTransactionInput>, res: Response) => {
     const groupId = Number(req.params.groupId);
-    const { userId, type, amount, category_id, transaction_date, description, is_recurring, recurring_interval, paid_by, splits } = req.body;
+    const { userId, type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval, paidBy, splits } = req.body;
 
-    //paid_by can be a different user's ID, but default assumption is the person creating the transaction paid for it
-    const payer = paid_by ?? userId;
+    //paidBy can be a different user's ID, but default assumption is the person creating the transaction paid for it
+    const payer = paidBy ?? userId;
 
     try {
         const transaction = await createGroupTransaction(
@@ -138,11 +138,11 @@ export const createGroup = async (req: Request<{ groupId: string }, {}, CreateGr
             payer,
             type,
             amount,
-            category_id ?? null,
-            transaction_date,
+            categoryId ?? null,
+            transactionDate,
             description ?? null,
-            is_recurring,
-            is_recurring ? recurring_interval ?? null : null
+            isRecurring,
+            isRecurring ? recurringInterval ?? null : null
         );
 
         if (splits) {
@@ -179,19 +179,20 @@ export const getGroup = async (req: Request<{ groupId: string }>, res: Response)
  * Important assumption that user performing the action is validated by middleware before this is reached
  */
 export const updateGroup = async (req: Request<{ groupId: string; id: string }>, res: Response) => {
-    const { id } = req.params;
-    const { type, amount, category_id, transaction_date, description, is_recurring, recurring_interval } = req.body;
+    const { id, groupId } = req.params;
+    const { type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval } = req.body;
 
     try {
         const transaction = await updateGroupTransaction(
             id,
+            groupId,
             type,
             amount,
-            category_id ?? null,
-            transaction_date,
+            categoryId ?? null,
+            transactionDate,
             description,
-            is_recurring,
-            is_recurring ? recurring_interval ?? null : null
+            isRecurring,
+            isRecurring ? recurringInterval ?? null : null
         );
 
         if (!transaction) {
@@ -211,10 +212,10 @@ export const updateGroup = async (req: Request<{ groupId: string; id: string }>,
  * Important assumption that user performing the action is validated by middleware before this is reached
  */
 export const deleteGroup = async (req: Request<{ groupId: string; id: string }>, res: Response) => {
-    const { id } = req.params;
+    const { id, groupId } = req.params;
 
     try {
-        const deleted = await deleteGroupTransaction(id);
+        const deleted = await deleteGroupTransaction(id, groupId);
 
         if (!deleted) {
             return res.status(404).json({ error: 'Transaction not found.' });
