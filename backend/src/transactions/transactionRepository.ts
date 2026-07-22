@@ -293,7 +293,7 @@ export const updateGroupTransaction = async (
     const query = `
         UPDATE transactions
         SET type = $1, amount = $2, category_id = $3, transaction_date = $4,
-            decription = $5, is_recurring = $6, recurring_interval = $7,
+            description = $5, is_recurring = $6, recurring_interval = $7,
             updated_at = now()
         WHERE id = $8 AND group_id = $9
         RETURNING
