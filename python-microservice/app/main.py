@@ -5,6 +5,7 @@ import os
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
+from app.insights import build_fallback_insights, generate_groq_insights
 from app.models import (
     HealthResponse,
     InsightsRequest,
@@ -45,17 +46,12 @@ def health_check() -> HealthResponse:
     response_model=InsightsResponse,
     tags=["insights"],
 )
-def generate_insights(_: InsightsRequest) -> InsightsResponse:
-    return InsightsResponse(
-        summary="Mock financial insight summary",
-        riskLevel="medium",
-        positiveNotes=["Your spending data is available for analysis."],
-        warnings=["This is a mock response until Gemini is connected."],
-        recommendations=[
-            "Set a weekly spending limit for high-spend categories."
-        ],
-        nextActions=["Review your top spending categories."],
-    )
+def generate_insights(summary: InsightsRequest) -> InsightsResponse:
+    groq_response, groq_error = generate_groq_insights(summary)
+    if groq_response is not None:
+        return groq_response
+
+    return build_fallback_insights(summary, groq_error)
 
 
 @app.post(

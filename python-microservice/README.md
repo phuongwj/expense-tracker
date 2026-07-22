@@ -1,11 +1,11 @@
 # Python Microservice
 
-This folder contains the FastAPI microservice skeleton for:
+This folder contains the FastAPI microservice for:
 
-- mock AI-powered financial insights
+- AI-powered financial insights with Groq and fallback mode
 - mock receipt and invoice extraction
 
-The service currently returns mock responses only. It does not call Gemini and does not perform real OCR yet.
+The service now tries Groq first for `/generate-insights` and falls back to local rule-based insights if `GROQ_API_KEY` is missing, the Groq SDK is unavailable, the API response is invalid, or the Groq request fails. Receipt extraction is still mock-only.
 
 ## Endpoints
 
@@ -43,6 +43,16 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+## Groq Configuration
+
+To enable Groq-backed insights, add your API key to `.env`:
+
+```env
+GROQ_API_KEY=your_groq_api_key_here
+```
+
+If `GROQ_API_KEY` is missing, `/generate-insights` still works in fallback mode.
 
 ### OpenAPI Docs
 
@@ -99,16 +109,16 @@ Group mode:
 }
 ```
 
-Mock response:
+Response shape:
 
 ```json
 {
-  "summary": "Mock financial insight summary",
-  "riskLevel": "medium",
-  "positiveNotes": ["Your spending data is available for analysis."],
-  "warnings": ["This is a mock response until Gemini is connected."],
-  "recommendations": ["Set a weekly spending limit for high-spend categories."],
-  "nextActions": ["Review your top spending categories."]
+  "summary": "...",
+  "riskLevel": "low | medium | high",
+  "positiveNotes": ["..."],
+  "warnings": ["..."],
+  "recommendations": ["..."],
+  "nextActions": ["..."]
 }
 ```
 
@@ -138,7 +148,56 @@ Mock response:
 
 ## Notes For Later
 
-- connect `/generate-insights` to Gemini after backend summary payloads are finalized
 - replace `/extract-receipt` mock logic with real OCR pipeline
 - add authentication between backend and this microservice if needed
 - switch receipt extraction to file upload when the frontend/backend contract is ready
+
+## Testing `/generate-insights`
+
+### Personal summary test
+
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/generate-insights" `
+  -Method POST `
+  -ContentType "application/json" `
+  -Body @'
+{
+  "scope": "personal",
+  "period": "monthly",
+  "totalIncome": 1800,
+  "totalExpenses": 1350,
+  "netBalance": 450,
+  "topCategories": [
+    { "category": "Food", "amount": 400 },
+    { "category": "Rent", "amount": 750 }
+  ],
+  "recurringExpenses": [
+    { "name": "Netflix", "amount": 17 }
+  ]
+}
+'@
+```
+
+### Group summary test
+
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/generate-insights" `
+  -Method POST `
+  -ContentType "application/json" `
+  -Body @'
+{
+  "scope": "group",
+  "period": "monthly",
+  "groupName": "Roommates",
+  "totalGroupExpenses": 1200,
+  "topCategories": [
+    { "category": "Rent", "amount": 900 },
+    { "category": "Groceries", "amount": 180 }
+  ],
+  "memberContributions": [
+    { "memberName": "Rohan", "paid": 930, "share": 400, "balance": 530 },
+    { "memberName": "Alex", "paid": 180, "share": 400, "balance": -220 }
+  ]
+}
+'@
+```
