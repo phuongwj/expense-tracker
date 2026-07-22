@@ -17,7 +17,6 @@ import {
     updateUserPassword,
 } from "./authRepository.ts";
 import { SignupInput, LoginInput, ForgotPasswordInput, ResetPasswordInput } from "./authSchemas.ts";
-import { AuthenticatedRequest } from "../middleware/authMiddleware.ts";
 import { toPublicUser } from "./authModel.ts";
 import { sendPasswordResetEmail } from "../config/email.ts";
 
@@ -191,7 +190,7 @@ export const logOut = async (req: Request, res: Response) => {
  * GET /me
  * Returns the authenticated user's profile.
  */
-export const getMe = async (req: AuthenticatedRequest, res: Response) => {
+export const getMe = async (req: Request, res: Response) => {
   try {
     const user = await findUserById(req.userId!);
 

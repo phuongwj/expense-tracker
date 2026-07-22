@@ -18,11 +18,9 @@ import { CreateTransactionInput, GetTransactionsInput, UpdateTransactionInput, C
  * Creates a new personal transaction for the authenticated user.
  */
 export const createPersonal = async (req: Request<{}, {}, CreateTransactionInput>, res: Response) => {
-    //const userId = req.userId; todo: investigate issue with being unable to use JWT via middleware 
+    const userId = req.userId!;
+    const { type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval } = req.body;
 
-    /**Note: Temporarily adding userId via req body until JWT issue is solved */
-    const { userId, type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval } = req.body;
-    
     try {
         const transaction = await createPersonalTransaction(
             userId,
@@ -47,12 +45,11 @@ export const createPersonal = async (req: Request<{}, {}, CreateTransactionInput
  * Returns the authenticated user's personal transactions, optionally filtered.
  */
 export const getPersonal = async (req: Request, res: Response) => {
-
-    //userID temporary part of req body until JWT issue is resolved. For now its included inside filters object.
+    const userId = req.userId!;
     const filters = (req as any).validatedQuery as GetTransactionsInput;
 
     try {
-        const transactions = await getPersonalTransactions(filters.userId, filters);
+        const transactions = await getPersonalTransactions(userId, filters);
         return res.status(200).json({ transactions });
     } catch (err) {
         console.error('Get personal transactions error:', err);
@@ -65,10 +62,9 @@ export const getPersonal = async (req: Request, res: Response) => {
  * Updates an existing personal transaction belonging to the authenticated user.
  */
 export const updatePersonal = async (req: Request<{ id: string }, {}, UpdateTransactionInput>, res: Response) => {
-    
+    const userId = req.userId!;
     const { id } = req.params;
-    //userID is temporarily part of body until JWT issue is resolved.
-    const { userId, type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval } = req.body;
+    const { type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval } = req.body;
 
     try {
         const transaction = await updatePersonalTransaction(
@@ -99,13 +95,11 @@ export const updatePersonal = async (req: Request<{ id: string }, {}, UpdateTran
  * Deletes a personal transaction belonging to the authenticated user.
  */
 export const deletePersonal = async (req: Request<{ id: string }, {}, {}>, res: Response) => {
-    //temporary until userId can be retrieved from JWT middleware
-    const { userId } = req.query;
-
+    const userId = req.userId!;
     const { id } = req.params;
 
     try {
-        const deleted = await deletePersonalTransaction(id, String(userId));
+        const deleted = await deletePersonalTransaction(id, userId);
 
         if (!deleted) {
             return res.status(404).json({ error: 'Transaction not found.' });
@@ -125,10 +119,10 @@ export const deletePersonal = async (req: Request<{ id: string }, {}, {}>, res: 
  * Creates a new group transaction, optionally with splits.
  */
 export const createGroup = async (req: Request<{ groupId: string }, {}, CreateGroupTransactionInput>, res: Response) => {
+    const userId = req.userId!;
     const groupId = Number(req.params.groupId);
-    const { userId, type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval, paidBy, splits } = req.body;
+    const { type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval, paidBy, splits } = req.body;
 
-    //paidBy can be a different user's ID, but default assumption is the person creating the transaction paid for it
     const payer = paidBy ?? userId;
 
     try {
