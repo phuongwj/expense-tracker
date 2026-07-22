@@ -31,6 +31,18 @@ The AI/OCR integration follows the same pattern in `backend/src/ai/`. The curren
 - `POST /api/ai/insights`
 - `POST /api/ai/extract-receipt`
 
+For Core Feature 3 demo work, the backend also includes a mock-backed `backend/src/importExport/` module with:
+- `POST /api/import/preview`
+- `POST /api/import/confirm`
+- `POST /api/export/preview`
+- `GET /api/export/csv`
+
+These endpoints use in-memory storage only for demo purposes. They do not write to the real transaction database yet, and can be swapped to real transaction persistence once that schema is finalized.
+
+`POST /api/import/preview` supports two input formats:
+- raw JSON with `csvText`
+- `multipart/form-data` with one uploaded CSV file in field `file`
+
 The split keeps responsibilities clear:
 - **Routes** wire URLs to middleware and controller functions.
 - **Controllers** handle request/response logic and orchestrate calls.
