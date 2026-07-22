@@ -4,6 +4,7 @@ export const signupSchema = z.object({
     firstName: z.string().trim().min(1, "First name is required."),
     lastName: z.string().trim().min(1, "Last name is required."),
     email: z.string().trim().toLowerCase().email("A valid email is required."),
+    // bcrypt silently truncates at 72 bytes
     password: z.string().min(8, "Password must be at least 8 characters.")
         .max(72, "Password must be at most 72 characters."),
 });
