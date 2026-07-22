@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { categories } from '../data/mockData'
+import Spinner, { simulateApiCall } from '../components/Spinner'
 
 const steps = [
   { n: 1, title: 'Upload', sub: 'CSV file of your transactions' },
