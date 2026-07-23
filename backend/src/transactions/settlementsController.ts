@@ -11,8 +11,8 @@ import { CreateSettlementInput } from "./transactionSchemas.ts";
  */
 export const createSettlement = async (req: Request<{ groupId: string }, {}, CreateSettlementInput>, res: Response) => {
     const groupId = Number(req.params.groupId);
-    const { userId, repayingUserId, amount } = req.body; // TEMPORARY: userId is receivingUserId until req.userId is sorted
-    const receivingUserId = userId;
+    const {repayingUserId, amount } = req.body;
+    const receivingUserId = req.userId!;
 
     if (repayingUserId === receivingUserId) {
         return res.status(400).json({ error: 'The same user cannot pay and be paid in the same settlement, please double check the users selected.' });

@@ -49,7 +49,7 @@ export const computeNetBalances = (splitRows: BalanceRow[], settlementRows: Bala
  */
 export const getGroupBalances = async (req: Request<{ groupId: string }>, res: Response) => {
     const groupId = Number(req.params.groupId);
-    const userId = (req.query.userId as string); // TEMPORARY until req.userId is sorted
+    const userId = req.userId!;
 
     try {
         const splitRows = await getGroupSplitsForUser(groupId, userId);
@@ -82,7 +82,7 @@ export const getGroupBalances = async (req: Request<{ groupId: string }>, res: R
  * across all their groups, plus a summary total.
  */
 export const getGlobalBalances = async (req: Request, res: Response) => {
-    const userId = (req.query.userId as string); // TEMPORARY until req.userId is sorted
+    const userId = req.userId!;
 
     try {
         const splitRows = await getAllSplitsForUser(userId);
