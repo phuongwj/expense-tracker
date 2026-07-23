@@ -18,3 +18,19 @@ export interface TransactionSplit {
     userId: string;
     amount: number;
 }
+
+export interface Settlement {
+    id: string;
+    groupId: number; //TODO: Change from number to string once Group table is added 
+    paidBy: string;
+    paidTo: string;
+    amount: number;
+    settledAt: Date;
+}
+
+//Used for Settlement-related queries, contains two userIDs (one who owes the other)
+export interface BalanceRow {
+    owes: string;
+    is_owed: string;
+    amount: string;
+}
