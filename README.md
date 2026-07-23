@@ -6,10 +6,14 @@ A full-stack expense tracking app built with React (frontend) and Express + Post
 
 ```
 expense-tracker/
+  packages/
+    shared/               # Shared Zod schemas used by both frontend and backend
+      src/
+        auth.ts           # Auth input schemas (signup, login, forgot/reset password)
   backend/
     migrations/           # Versioned SQL files, one per database change
     src/
-      auth/               # Auth feature (signup, login, refresh, logout)
+      auth/               # Auth feature (signup, login, refresh, logout, password reset)
       transactions/       # Transactions feature
       groups/             # Groups feature
       ...
@@ -26,6 +30,10 @@ expense-tracker/
 ```
 
 Each backend feature gets its own folder under `src/` and follows the same file naming pattern: `<feature>Routes.ts`, `<feature>Controller.ts`, `<feature>Repository.ts`, `<feature>Schemas.ts`, `<feature>Model.ts`. For example, a transactions feature would live in `src/transactions/` with `transactionRoutes.ts`, `transactionController.ts`, and so on.
+
+The AI/OCR integration follows the same pattern in `backend/src/ai/`. The current backend AI endpoints are:
+- `POST /api/ai/insights`
+- `POST /api/ai/extract-receipt`
 
 The split keeps responsibilities clear:
 - **Routes** wire URLs to middleware and controller functions.
@@ -64,6 +72,99 @@ Routes -> Schema -> Controller -> Repository -> Model
 **Type definitions**. TypeScript interfaces that describe the shape of data in the app. The repository returns these types, the controller works with them.
 
 
+## Shared package (`packages/shared/`)
+
+The `packages/shared/` package holds Zod schemas that both the frontend and backend need. This ensures validation rules (field names, types, constraints, error messages) are defined in one place, so they can't drift out of sync.
+
+### What goes in shared
+
+**Input schemas** — schemas that validate what the user types into a form. These are used by the frontend (form validation with `react-hook-form`) and the backend (request body validation with `validateBody()` middleware). If both sides need the same validation, the schema belongs in shared.
+
+Currently in shared:
+- `signupSchema` — first name, last name, email, password
+- `loginSchema` — email, password
+- `forgotPasswordSchema` — email
+- `resetPasswordSchema` — email, 6-digit code, new password
+
+### What stays in the backend
+
+**Backend-only schemas** — schemas that validate things the frontend never touches, like URL params or query strings. For example, `deleteTransactionSchema` validates that `:id` is a valid UUID. The frontend doesn't run that check; it just sends the request.
+
+### How to move a schema to shared
+
+If you have a schema in your backend feature folder that the frontend also needs, here's how to move it:
+
+**1. Add the schema to a file in `packages/shared/src/`**
+
+Create a new file (or add to an existing one) based on the feature name:
+
+```ts
+// packages/shared/src/transactions.ts
+import { z } from "zod";
+
+export const createTransactionSchema = z.object({
+    type: z.enum(['expense', 'income']),
+    amount: z.number().positive("Transaction amount must be greater than zero."),
+    // ... rest of the schema
+});
+export type CreateTransactionInput = z.infer<typeof createTransactionSchema>;
+```
+
+**2. Register the new file in `packages/shared/package.json`**
+
+Add an entry to the `exports` map so other packages can import it:
+
+```json
+{
+  "exports": {
+    "./auth": "./src/auth.ts",
+    "./transactions": "./src/transactions.ts"
+  }
+}
+```
+
+**3. Update the backend's schema file to re-export**
+
+Replace the inline definition with a re-export from the shared package. Keep any backend-only schemas in place:
+
+```ts
+// backend/src/transactions/transactionSchemas.ts
+
+// Shared schemas — re-exported so existing imports don't break
+export {
+    createTransactionSchema,
+    getTransactionsSchema,
+} from "@expense-tracker/shared/transactions";
+
+export type {
+    CreateTransactionInput,
+    GetTransactionsInput,
+} from "@expense-tracker/shared/transactions";
+
+// Backend-only schemas — stay here
+export const deleteTransactionSchema = z.object({
+    id: z.string().uuid("A valid transaction id is required."),
+});
+```
+
+That's it — no `npm install` needed. The shared package is already symlinked via npm workspaces, so any new files you add to `packages/shared/src/` are picked up immediately.
+
+### How it works under the hood
+
+The project uses **npm workspaces**. The root `package.json` declares `backend`, `frontend`, and `packages/*` as workspaces. When you ran `npm install` during initial setup, npm created a symlink:
+
+```
+node_modules/@expense-tracker/shared → ../../packages/shared
+```
+
+> A **symlink** (symbolic link) is like a shortcut. Instead of copying the `packages/shared/` folder into `node_modules/`, npm creates a pointer that says "when someone imports `@expense-tracker/shared`, go look at `packages/shared/` instead." This means any changes you make in `packages/shared/src/` are picked up instantly — there's nothing to rebuild or reinstall.
+
+
+## API Documentation
+
+See [API_DOCS.md](API_DOCS.md) for full request/response docs for all endpoints.
+
+
 ## Database migrations
 
 We use [node-pg-migrate](https://github.com/salsita/node-pg-migrate) to manage database schema changes. Instead of modifying tables by hand, every change is a timestamped SQL file in `backend/migrations/`. Migrations run in order, so anyone can spin up the same database from scratch.
@@ -93,11 +194,11 @@ We use [node-pg-migrate](https://github.com/salsita/node-pg-migrate) to manage d
 
 Run these from the `backend/` directory:
 
-| Command | What it does |
-| --- | --- |
-| `npm run migration:create -- <name>` | Create a new empty migration file. Example: `npm run migration:create -- 002-transactions` |
-| `npm run migrate:up` | Apply all pending migrations (runs the Up section of each file that hasn't run yet). |
-| `npm run migrate:down` | Roll back the **single most recent** migration (runs its Down section). Run it multiple times to roll back further. |
+| Command                                 | What it does                                                                                   |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `npm run migration:create -- <name>`    | Create a new empty migration file. Example: `npm run migration:create -- 002-transactions`     |
+| `npm run migrate:up`                    | Apply all pending migrations (runs the Up section of each file that hasn't run yet).           |
+| `npm run migrate:down`                  | Roll back the **single most recent** migration (runs its Down section). Run it multiple times to roll back further. |
 
 ### Rules
 

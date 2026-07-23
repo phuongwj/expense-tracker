@@ -1,18 +1,22 @@
-import { z } from "zod";
+/**
+ * Shorthand convention for
+ * import { signupSchema } from "@expense-tracker/shared/auth";
+ * export { signupSchema }
+ * etc.
+ *
+ * Reason why we're writing it this way is so that all the existing imports
+ * in the backend files don't have to be updated.
+ */
+export {
+    signupSchema,
+    loginSchema,
+    forgotPasswordSchema,
+    resetPasswordSchema,
+} from "@expense-tracker/shared/auth";
 
-export const signupSchema = z.object({
-    firstName: z.string().trim().min(1, "First name is required."),
-    lastName: z.string().trim().min(1, "Last name is required."),
-    email: z.string().trim().toLowerCase().email("A valid email is required."),
-    // bcrypt silently truncates at 72 bytes, so cap here to avoid the
-    // surprise of two different passwords hashing to the same value.
-    password: z.string().min(8, "Password must be at least 8 characters.")
-        .max(72, "Password must be at most 72 characters."),
-});
-export type SignupInput = z.infer<typeof signupSchema>;
-
-export const loginSchema = z.object({
-    email: z.string().trim().toLowerCase().email("A valid email is required."),
-    password: z.string().min(1, "Password is required."),
-});
-export type LoginInput = z.infer<typeof loginSchema>;
+export type {
+    SignupInput,
+    LoginInput,
+    ForgotPasswordInput,
+    ResetPasswordInput,
+} from "@expense-tracker/shared/auth";

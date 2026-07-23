@@ -40,7 +40,7 @@ CREATE TABLE transaction_splits (
   transaction_id UUID NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id),
   amount DECIMAL(10,2) NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Down Migration
