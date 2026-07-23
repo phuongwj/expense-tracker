@@ -16,7 +16,7 @@ import {
  */
 export const getCategories = async (req: Request, res: Response) => {
     // TODO: Replace with req.userId once JWT middleware is fixed.
-    const { userId } = req.query;
+    const userId  = req.userId!;
 
     try {
         const categories = await getUserCategories(String(userId));
@@ -38,8 +38,9 @@ export const create = async (
     req: Request<{}, {}, CategoryInput>,
     res: Response
 ) => {
-    // TODO: Replace with req.userId once JWT middleware is fixed.
-    const { userId, name } = req.body;
+
+    const { name } = req.body;
+    const userId = req.userId!;
 
     try {
         const category = await createCategory(name, userId);
@@ -63,8 +64,8 @@ export const update = async (
 ) => {
     const { id } = req.params;
 
-    // TODO: Replace with req.userId once JWT middleware is fixed.
-    const { userId, name } = req.body;
+    const userId = req.userId!;
+    const {  name } = req.body;
 
     try {
         const category = await updateCategory(
@@ -98,8 +99,7 @@ export const remove = async (
 ) => {
     const { id } = req.params;
 
-    // TODO: Replace with req.userId once JWT middleware is fixed.
-    const { userId } = req.query;
+    const userId  = req.userId!;
 
     try {
         const deleted = await deleteCategory(

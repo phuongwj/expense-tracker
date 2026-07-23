@@ -12,6 +12,7 @@ import {
 } from "./transactionRepository.ts";
 
 import { CreateTransactionInput, GetTransactionsInput, UpdateTransactionInput, CreateGroupTransactionInput } from "./transactionSchemas.ts";
+import { TransactionSplit } from "./transactionModel.ts";
 
 /**
  * POST /api/transactions
@@ -139,11 +140,13 @@ export const createGroup = async (req: Request<{ groupId: string }, {}, CreateGr
             isRecurring ? recurringInterval ?? null : null
         );
 
+        let createdSplits: TransactionSplit[] = [];
+
         if (splits) {
-            await insertTransactionSplits(transaction.id, splits);
+            createdSplits = await insertTransactionSplits(transaction.id, splits);
         }
 
-        return res.status(201).json(transaction);
+        return res.status(201).json({...transaction, splits: createdSplits});
     } catch (err) {
         console.error('Create group transaction error:', err);
         return res.status(500).json({ error: 'Something went wrong creating your transaction.' });

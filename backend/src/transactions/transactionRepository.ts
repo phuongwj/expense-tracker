@@ -61,7 +61,7 @@ export const getPersonalTransactions = async (
             t.recurring_interval AS "recurringInterval"
         FROM transactions t
         LEFT JOIN categories c
-        ON t.category_id = c.categories.id
+        ON t.category_id = c.id
         WHERE t.user_id = $1
         AND t.group_id IS NULL
     `;
@@ -202,13 +202,23 @@ export const createGroupTransaction = async (
 export const insertTransactionSplits = async (
     transactionId: string,
     splits: { userId: string; amount: number }[]
-): Promise<void> => {
+): Promise<TransactionSplit[]> => {
+    const splitsAdded: TransactionSplit[] = [];
+
     for (const split of splits) {
-        await pool.query(
-            `INSERT INTO transaction_splits (transaction_id, user_id, amount) VALUES ($1, $2, $3)`,
+        const result = await pool.query(
+            `INSERT INTO transaction_splits (transaction_id, user_id, amount) VALUES ($1, $2, $3)
+            RETURNING 
+                id,
+                transaction_id AS 'transactionId',
+                user_id AS 'userID',
+                amount
+            `,
             [transactionId, split.userId, split.amount]
         );
+        splitsAdded.push(result.rows[0]);
     }
+    return splitsAdded;
 }
 
 /**

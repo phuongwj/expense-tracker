@@ -13,35 +13,34 @@ import {
     validateParams,
 } from "../middleware/validateRequest.ts";
 
-import { categorySchema } from "./categorySchemas.ts";
+import { categorySchema,  categoryIdSchema } from "./categorySchemas.ts";
+
+import { requireAuth } from "../middleware/authMiddleware.ts";
 
 const router = express.Router();
-
-// **IMPORTANT: Need to update these routes to include authMiddleware once
-// issue with adding token to Request object is sorted.
 
 /**
  * GET /api/categories
  * Returns the user's categories along with system categories.
  */
-router.get("/",  getCategories);
+router.get("/", requireAuth, getCategories);
 
 /**
  * POST /api/categories
  * Creates a new category for the user.
  */
-router.post("/", validateBody(categorySchema), create);
+router.post("/", requireAuth, validateBody(categorySchema), create);
 
 /**
  * PUT /api/categories/:id
  * Updates the user's category with the given ID.
  */
-router.put("/:id", validateBody(categorySchema), update);
+router.put("/:id", requireAuth, validateBody(categorySchema), update);
 
 /**
  * DELETE /api/categories/:id
  * Deletes the user's category with the given ID.
  */
-router.delete("/:id", validateParams(categorySchema), remove);
+router.delete("/:id", requireAuth, validateParams(categoryIdSchema), remove);
 
 export default router;
