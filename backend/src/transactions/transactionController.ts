@@ -1,4 +1,6 @@
 import { Request, Response } from "express";
+import { NotFoundError } from "../errors/AppError.ts";
+
 import {
     createPersonalTransaction,
     getPersonalTransactions,
@@ -73,7 +75,7 @@ export const updatePersonal = asyncHandler (async (req: Request<{ id: string }, 
     );
 
     if (!transaction) {
-        return res.status(404).json({ error: 'Transaction not found.' });
+        throw new NotFoundError('This transaction could not be found. It may have already been deleted, or the ID may be incorrect.');
     }
 
     return res.status(200).json(transaction);
@@ -93,7 +95,7 @@ export const deletePersonal = asyncHandler (async (
     const deleted = await deletePersonalTransaction(id, userId);
 
     if (!deleted) {
-        return res.status(404).json({ error: 'Transaction not found.' });
+        throw new NotFoundError('This transaction could not be found. It may have already been deleted, or the ID may be incorrect.');
     }
 
     return res.status(204).send();
@@ -192,7 +194,7 @@ export const updateGroup = asyncHandler (async (
     );
 
     if (!transaction) {
-        return res.status(404).json({ error: 'Transaction not found.' });
+        throw new NotFoundError('This group transaction could not be found. It may have already been deleted.');
     }
 
     return res.status(200).json(transaction);
@@ -212,8 +214,7 @@ export const deleteGroup = asyncHandler (async (
     const deleted = await deleteGroupTransaction(id, groupId);
 
     if (!deleted) {
-        return res.status(404).json({ error: 'Transaction not found.' });
+        throw new NotFoundError('This group transaction could not be found. It may have already been deleted.');
     }
-
     return res.status(204).send();
 });

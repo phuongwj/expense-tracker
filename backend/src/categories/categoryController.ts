@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../middleware/asyncHandler.ts";
+import { NotFoundError } from "../errors/AppError.ts";
 import {
     createCategory,
     getUserCategories,
@@ -59,9 +60,7 @@ export const update = asyncHandler(async (
     );
 
     if (!category) {
-        return res.status(404).json({
-            error: "Category not found.",
-        });
+        throw new NotFoundError("This category could not be found. It may have already been deleted, or it may not belong to your account.");
     }
 
     return res.status(200).json(category);
@@ -78,16 +77,14 @@ export const remove = asyncHandler( async (
     const { id } = req.params;
 
     const userId  = req.userId!;
-    
+
     const deleted = await deleteCategory(
         id,
         String(userId)
     );
 
     if (!deleted) {
-        return res.status(404).json({
-            error: "Category not found.",
-        });
+        throw new NotFoundError("This category could not be found. It may have already been deleted, or it may not belong to your account.");
     }
 
     return res.status(204).send();

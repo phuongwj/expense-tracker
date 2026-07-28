@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import jwt, { SignOptions } from "jsonwebtoken";
 import { randomBytes, randomInt, createHash } from "crypto";
 import { asyncHandler } from "../middleware/asyncHandler.ts";
+import { NotFoundError, UnauthorizedError, ConflictError, TooManyRequestsError, BadRequestError } from "../errors/AppError.ts";
 import {
     findUserByEmail,
     findUserById,
@@ -80,9 +81,10 @@ export const signUp = asyncHandler(async (req: Request<{}, {}, SignupInput>, res
   const { firstName, lastName, email, password } = req.body;
 
   const existing = await findUserByEmail(email);
-    if (existing) {
-      return res.status(409).json({ error: 'An account with this email already exists.' });
-    }
+
+  if (existing) {
+    throw new ConflictError('An account with this email already exists. Try logging in if you own the account, or sign up with a different email.');
+  }
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
     const user = await createUser(firstName, lastName, email, passwordHash);
@@ -106,9 +108,8 @@ export const logIn = asyncHandler(async (req: Request<{}, {}, LoginInput>, res: 
   const user = await findUserByEmail(email);
 
   // Same generic error for both cases on purpose — don't leak which
-  // registered emails exist.
   if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-    return res.status(401).json({ error: 'Invalid email or password.' });
+      throw new UnauthorizedError('Incorrect email or password. Please double-check your credentials and try again.');
   }
 
   const { accessToken, refreshToken } = await issueTokenPair(user.id);
@@ -129,14 +130,14 @@ export const refresh = asyncHandler ( async (req: Request, res: Response) => {
   const refreshToken = req.cookies?.[COOKIE_NAME];
 
   if (!refreshToken) {
-    return res.status(401).json({ error: 'Invalid or expired refresh token.' });
+      throw new UnauthorizedError('Your session has expired. Please log in again.');
   }
 
   const existingToken = await findRefreshTokenByHash(hashToken(refreshToken));
 
   if (!existingToken || existingToken.revokedAt || existingToken.expiresAt.getTime() < Date.now()) {
-    clearRefreshCookie(res);
-    return res.status(401).json({ error: 'Invalid or expired refresh token.' });
+      clearRefreshCookie(res);
+      throw new UnauthorizedError('Your session has expired. Please log in again.');
   }
 
   const issued = await issueTokenPair(existingToken.userId);
@@ -175,7 +176,7 @@ export const getMe = asyncHandler (async (req: Request, res: Response) => {
   const user = await findUserById(req.userId!);
 
   if (!user) {
-    return res.status(404).json({ error: 'User not found.' });
+      throw new NotFoundError('We could not find your account. Please log out and log back in — if this keeps happening, your account may need to be recreated.');
   }
 
   return res.status(200).json({ user: toPublicUser(user) });
@@ -215,24 +216,26 @@ export const resetPassword = asyncHandler (async (req: Request<{}, {}, ResetPass
   const { email, code, password } = req.body;
 
   const user = await findUserByEmail(email);
+  
+  //Giving generic message to not expose info about the entered email not existing in the system. 
   if (!user) {
-    return res.status(400).json({ error: 'Invalid or expired verification code.' });
+      throw new BadRequestError('Invalid or expired verification code. Please request a new one.');
   }
 
   const tokenRecord = await findActiveResetTokenByUser(user.id);
 
   if (!tokenRecord) {
-    return res.status(400).json({ error: 'Invalid or expired verification code.' });
+    throw new BadRequestError('Invalid or expired verification code. Please request a new one.');
   }
 
   if (tokenRecord.attempts >= MAX_RESET_ATTEMPTS) {
     await markAllUserResetTokensUsed(user.id);
-    return res.status(429).json({ error: 'Too many attempts. Please request a new code.' });
+    throw new TooManyRequestsError('Too many incorrect attempts. Please request a new verification code.');
   }
 
   if (hashToken(code) !== tokenRecord.codeHash) {
-    await incrementResetTokenAttempts(tokenRecord.id);
-    return res.status(400).json({ error: 'Invalid or expired verification code.' });
+      await incrementResetTokenAttempts(tokenRecord.id);
+      throw new BadRequestError('Invalid or expired verification code. Please request a new one.');
   }
 
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);

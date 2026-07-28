@@ -3,6 +3,7 @@ import { asyncHandler } from "../middleware/asyncHandler.ts";
 import { getGroupSplitsBetweenUsers, getGroupSettlementsBetweenUsers, insertSettlement } from "./transactionRepository.ts";
 import { computeNetBalances } from "./balancesController.ts";
 import { CreateSettlementInput } from "./transactionSchemas.ts";
+import { BadRequestError } from "../errors/AppError.ts";
 
 
 /**
@@ -16,9 +17,9 @@ export const createSettlement = asyncHandler (async (req: Request<{ groupId: str
     const receivingUserId = req.userId!;
 
     if (repayingUserId === receivingUserId) {
-        return res.status(400).json({ error: 'The same user cannot pay and be paid in the same settlement, please double check the users selected.' });
+        throw new BadRequestError('You cannot record a settlement with yourself. Please check that you selected the correct group member.');
     }
-    
+
     const splitRows = await getGroupSplitsBetweenUsers(groupId, repayingUserId, receivingUserId);
     const settlementRows = await getGroupSettlementsBetweenUsers(groupId, repayingUserId, receivingUserId);
 
@@ -26,17 +27,14 @@ export const createSettlement = asyncHandler (async (req: Request<{ groupId: str
     const amountOwed = net.get(receivingUserId) ?? 0;
 
     if (amountOwed <= 0) {
-        return res.status(400).json({ error: 'This member does not currently owe you anything in this group.' });
+        throw new BadRequestError('This member does not currently owe you anything in this group, so there is nothing to settle.');
     }
 
     //For simplicity, settlements are assumed to be paid for the full amount owed. 
     if (Math.abs(amountOwed - amount) > 0) {
-        return res.status(400).json({
-            error: 'Partial settlements are not supported. Amount must match the full amount owed.',
-            expectedAmount: amountOwed
-        });
+        throw new BadRequestError(`Partial settlements aren't supported yet. Please enter the full amount owed — $${amountOwed.toFixed(2)} — to settle up.`);
     }
-
+    
     const settlement = await insertSettlement(groupId, repayingUserId, receivingUserId, amount);
     return res.status(201).json(settlement);
 });
