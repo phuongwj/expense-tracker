@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import jwt, { SignOptions } from "jsonwebtoken";
 import { randomBytes, randomInt, createHash } from "crypto";
+import { asyncHandler } from "../middleware/asyncHandler.ts";
 import {
     findUserByEmail,
     findUserById,
@@ -75,11 +76,10 @@ const issueTokenPair = async (userId: string) => {
  * POST /signup
  * Creates a new user and logs them in immediately.
  */
-export const signUp = async (req: Request<{}, {}, SignupInput>, res: Response) => {
+export const signUp = asyncHandler(async (req: Request<{}, {}, SignupInput>, res: Response) => {
   const { firstName, lastName, email, password } = req.body;
 
-  try {
-    const existing = await findUserByEmail(email);
+  const existing = await findUserByEmail(email);
     if (existing) {
       return res.status(409).json({ error: 'An account with this email already exists.' });
     }
@@ -94,83 +94,68 @@ export const signUp = async (req: Request<{}, {}, SignupInput>, res: Response) =
       accessToken,
       user: toPublicUser(user),
     });
-  } catch (err) {
-    console.error('Signup error:', err);
-    return res.status(500).json({ error: 'Something went wrong creating your account.' });
-  }
-};
+  });
 
 /**
  * POST /login
  * Verifies credentials and issues a new access/refresh token pair.
  */
-export const logIn = async (req: Request<{}, {}, LoginInput>, res: Response) => {
+export const logIn = asyncHandler(async (req: Request<{}, {}, LoginInput>, res: Response) => {
   const { email, password } = req.body;
 
-  try {
-    const user = await findUserByEmail(email);
+  const user = await findUserByEmail(email);
 
-    // Same generic error for both cases on purpose — don't leak which
-    // registered emails exist.
-    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-      return res.status(401).json({ error: 'Invalid email or password.' });
-    }
-
-    const { accessToken, refreshToken } = await issueTokenPair(user.id);
-    setRefreshCookie(res, refreshToken);
-
-    return res.status(200).json({
-      message: 'Logged in successfully.',
-      accessToken,
-      user: toPublicUser(user),
-    });
-  } catch (err) {
-    console.error('Login error:', err);
-    return res.status(500).json({ error: 'Something went wrong logging you in.' });
+  // Same generic error for both cases on purpose — don't leak which
+  // registered emails exist.
+  if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+    return res.status(401).json({ error: 'Invalid email or password.' });
   }
-};
+
+  const { accessToken, refreshToken } = await issueTokenPair(user.id);
+  setRefreshCookie(res, refreshToken);
+
+  return res.status(200).json({
+    message: 'Logged in successfully.',
+    accessToken,
+    user: toPublicUser(user),
+  });
+});
 
 /**
  * POST /refresh
  * Rotates a refresh token: the presented token is revoked and replaced by a new pair.
  */
-export const refresh = async (req: Request, res: Response) => {
+export const refresh = asyncHandler ( async (req: Request, res: Response) => {
   const refreshToken = req.cookies?.[COOKIE_NAME];
 
   if (!refreshToken) {
     return res.status(401).json({ error: 'Invalid or expired refresh token.' });
   }
 
-  try {
-    const existingToken = await findRefreshTokenByHash(hashToken(refreshToken));
+  const existingToken = await findRefreshTokenByHash(hashToken(refreshToken));
 
-    if (!existingToken || existingToken.revokedAt || existingToken.expiresAt.getTime() < Date.now()) {
-      clearRefreshCookie(res);
-      return res.status(401).json({ error: 'Invalid or expired refresh token.' });
-    }
-
-    const issued = await issueTokenPair(existingToken.userId);
-    await revokeRefreshToken(existingToken.id, issued.refreshTokenRecord.id);
-    setRefreshCookie(res, issued.refreshToken);
-
-    return res.status(200).json({
-      accessToken: issued.accessToken,
-    });
-  } catch (err) {
-    console.error('Refresh error:', err);
-    return res.status(500).json({ error: 'Something went wrong refreshing your session.' });
+  if (!existingToken || existingToken.revokedAt || existingToken.expiresAt.getTime() < Date.now()) {
+    clearRefreshCookie(res);
+    return res.status(401).json({ error: 'Invalid or expired refresh token.' });
   }
-};
+
+  const issued = await issueTokenPair(existingToken.userId);
+  await revokeRefreshToken(existingToken.id, issued.refreshTokenRecord.id);
+  setRefreshCookie(res, issued.refreshToken);
+
+  return res.status(200).json({
+    accessToken: issued.accessToken,
+  });
+});
 
 /**
  * POST /logout
  * Revokes the presented refresh token, ending that session.
  */
-export const logOut = async (req: Request, res: Response) => {
+export const logOut = asyncHandler (async (req: Request, res: Response) => {
   const refreshToken = req.cookies?.[COOKIE_NAME];
 
-  try {
-    if (refreshToken) {
+  if (refreshToken) {
       const existingToken = await findRefreshTokenByHash(hashToken(refreshToken));
 
       if (existingToken) {
@@ -180,101 +165,82 @@ export const logOut = async (req: Request, res: Response) => {
 
     clearRefreshCookie(res);
     return res.status(200).json({ message: 'Logged out successfully.' });
-  } catch (err) {
-    console.error('Logout error:', err);
-    return res.status(500).json({ error: 'Something went wrong logging you out.' });
-  }
-};
+});
 
 /**
  * GET /me
  * Returns the authenticated user's profile.
  */
-export const getMe = async (req: Request, res: Response) => {
-  try {
-    const user = await findUserById(req.userId!);
+export const getMe = asyncHandler (async (req: Request, res: Response) => {
+  const user = await findUserById(req.userId!);
 
-    if (!user) {
-      return res.status(404).json({ error: 'User not found.' });
-    }
-
-    return res.status(200).json({ user: toPublicUser(user) });
-  } catch (err) {
-    console.error('Get me error:', err);
-    return res.status(500).json({ error: 'Something went wrong retrieving your profile.' });
+  if (!user) {
+    return res.status(404).json({ error: 'User not found.' });
   }
-};
+
+  return res.status(200).json({ user: toPublicUser(user) });
+});
 
 /**
  * POST /forgot-password
  * Generates a 6-digit OTP and logs it to the console (email service TODO).
  * Always returns 200 to prevent email enumeration.
  */
-export const forgotPassword = async (req: Request<{}, {}, ForgotPasswordInput>, res: Response) => {
+export const forgotPassword = asyncHandler (async (req: Request<{}, {}, ForgotPasswordInput>, res: Response) => {
   const { email } = req.body;
 
-  try {
-    const user = await findUserByEmail(email);
+  const user = await findUserByEmail(email);
 
-    if (user) {
-      await markAllUserResetTokensUsed(user.id);
+  if (user) {
+    await markAllUserResetTokensUsed(user.id);
 
-      const otp = String(randomInt(100000, 999999));
-      const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MINUTES * 60 * 1000);
-      await insertPasswordResetToken(user.id, hashToken(otp), expiresAt);
+    const otp = String(randomInt(100000, 999999));
+    const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MINUTES * 60 * 1000);
+    await insertPasswordResetToken(user.id, hashToken(otp), expiresAt);
 
-      await sendPasswordResetEmail(email, otp);
-    }
-
-    return res.status(200).json({
-      message: 'If an account with that email exists, a verification code has been sent.',
-    });
-  } catch (err) {
-    console.error('Forgot password error:', err);
-    return res.status(500).json({ error: 'Something went wrong processing your request.' });
+    await sendPasswordResetEmail(email, otp);
   }
-};
+
+  return res.status(200).json({
+    message: 'If an account with that email exists, a verification code has been sent.',
+  });
+});
 
 /**
  * POST /reset-password
  * Validates the OTP, updates the password, and invalidates all sessions.
  * Locks out after MAX_RESET_ATTEMPTS failed tries.
  */
-export const resetPassword = async (req: Request<{}, {}, ResetPasswordInput>, res: Response) => {
+export const resetPassword = asyncHandler (async (req: Request<{}, {}, ResetPasswordInput>, res: Response) => {
   const { email, code, password } = req.body;
 
-  try {
-    const user = await findUserByEmail(email);
-    if (!user) {
-      return res.status(400).json({ error: 'Invalid or expired verification code.' });
-    }
-
-    const tokenRecord = await findActiveResetTokenByUser(user.id);
-
-    if (!tokenRecord) {
-      return res.status(400).json({ error: 'Invalid or expired verification code.' });
-    }
-
-    if (tokenRecord.attempts >= MAX_RESET_ATTEMPTS) {
-      await markAllUserResetTokensUsed(user.id);
-      return res.status(429).json({ error: 'Too many attempts. Please request a new code.' });
-    }
-
-    if (hashToken(code) !== tokenRecord.codeHash) {
-      await incrementResetTokenAttempts(tokenRecord.id);
-      return res.status(400).json({ error: 'Invalid or expired verification code.' });
-    }
-
-    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-    await updateUserPassword(user.id, passwordHash);
-    await markAllUserResetTokensUsed(user.id);
-    await revokeAllUserRefreshTokens(user.id);
-
-    return res.status(200).json({
-      message: 'Password has been reset successfully. Please log in with your new password.',
-    });
-  } catch (err) {
-    console.error('Reset password error:', err);
-    return res.status(500).json({ error: 'Something went wrong resetting your password.' });
+  const user = await findUserByEmail(email);
+  if (!user) {
+    return res.status(400).json({ error: 'Invalid or expired verification code.' });
   }
-};
+
+  const tokenRecord = await findActiveResetTokenByUser(user.id);
+
+  if (!tokenRecord) {
+    return res.status(400).json({ error: 'Invalid or expired verification code.' });
+  }
+
+  if (tokenRecord.attempts >= MAX_RESET_ATTEMPTS) {
+    await markAllUserResetTokensUsed(user.id);
+    return res.status(429).json({ error: 'Too many attempts. Please request a new code.' });
+  }
+
+  if (hashToken(code) !== tokenRecord.codeHash) {
+    await incrementResetTokenAttempts(tokenRecord.id);
+    return res.status(400).json({ error: 'Invalid or expired verification code.' });
+  }
+
+  const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+  await updateUserPassword(user.id, passwordHash);
+  await markAllUserResetTokensUsed(user.id);
+  await revokeAllUserRefreshTokens(user.id);
+
+  return res.status(200).json({
+    message: 'Password has been reset successfully. Please log in with your new password.',
+  });
+});

@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { asyncHandler } from "../middleware/asyncHandler.ts";
 
 import {
   buildDraftTransaction,
@@ -13,7 +14,7 @@ import {
   receiptExtractionRequestSchema,
 } from "./aiSchemas.ts";
 
-const buildValidationFields = (issues: { path: (string | number)[]; message: string }[]) => {
+const buildValidationFields = (issues: { path: PropertyKey[]; message: string }[]) => {
   const fields: Record<string, string> = {};
 
   for (const issue of issues) {
@@ -26,7 +27,7 @@ const buildValidationFields = (issues: { path: (string | number)[]; message: str
   return fields;
 };
 
-export const generateInsights = async (req: Request, res: Response) => {
+export const generateInsights = asyncHandler( async (req: Request, res: Response) => {
   const parsedBody = insightsRequestBodySchema.safeParse(req.body);
 
   if (!parsedBody.success) {
@@ -50,15 +51,15 @@ export const generateInsights = async (req: Request, res: Response) => {
       message: result.body.message,
       summarySent: summary,
     });
-  }
+  };
 
   return res.status(200).json({
     summarySent: summary,
     insights: result.body,
   });
-};
+});
 
-export const extractReceipt = async (req: Request, res: Response) => {
+export const extractReceipt = asyncHandler(async (req: Request, res: Response) => {
   const parsedBody = receiptExtractionRequestSchema.safeParse(req.body);
 
   if (!parsedBody.success) {
@@ -91,4 +92,4 @@ export const extractReceipt = async (req: Request, res: Response) => {
       ? "Mock extraction used receipt text as placeholder input. Real OCR is not connected yet."
       : "Mock extraction result returned by the FastAPI receipt service.",
   });
-};
+});
