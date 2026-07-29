@@ -323,7 +323,7 @@ export const deleteGroupTransaction = async (transactionId: string, groupId: str
     return (result.rowCount ?? 0) > 0;
 }
 
-export const insertSettlement = async (groupId: number, paidBy: string, paidTo: string, amount: number): Promise<Settlement> => {
+export const insertSettlement = async (groupId: string, paidBy: string, paidTo: string, amount: number): Promise<Settlement> => {
     const query = `
         INSERT INTO settlements (group_id, paid_by, paid_to, amount)
         VALUES ($1, $2, $3, $4)
@@ -341,9 +341,9 @@ export const insertSettlement = async (groupId: number, paidBy: string, paidTo: 
 /* Gets all transaction split total amounts (either paid or still owed) between the user and members 
 * of a given group. Used in combination with the get settlements query to calculate active balances
 */
-export const getGroupSplitsForUser = async (groupId: number, userId: string): Promise<BalanceRow[]> => {
+export const getGroupSplitsForUser = async (groupId: string, userId: string): Promise<BalanceRow[]> => {
     const query = `
-        SELECT ts.user_id AS owes, t.paid_by AS is_owed, SUM(ts.amount) AS amount
+        SELECT ts.user_id AS owes, t.paid_by AS "isOwed", SUM(ts.amount) AS amount
         FROM transaction_splits ts
         JOIN transactions t ON t.id = ts.transaction_id
         WHERE t.group_id = $1
@@ -358,9 +358,9 @@ export const getGroupSplitsForUser = async (groupId: number, userId: string): Pr
 * Gets all settlements for a user and members of a given group. Used in combination with the getGroupSplits query
 * in order to calculate active balances. 
 */
-export const getGroupSettlementsForUser = async (groupId: number, userId: string): Promise<BalanceRow[]> => {
+export const getGroupSettlementsForUser = async (groupId: string, userId: string): Promise<BalanceRow[]> => {
     const query = `
-        SELECT paid_by AS owes, paid_to AS is_owed, SUM(amount) AS amount
+        SELECT paid_by AS owes, paid_to AS "isOwed", SUM(amount) AS amount
         FROM settlements
         WHERE group_id = $1
         AND (paid_by = $2 OR paid_to = $2)
@@ -376,7 +376,7 @@ export const getGroupSettlementsForUser = async (groupId: number, userId: string
  */
 export const getAllSplitsForUser = async (userId: string): Promise<BalanceRow[]> => {
     const query = `
-        SELECT ts.user_id AS owes, t.paid_by AS is_owed, SUM(ts.amount) AS amount
+        SELECT ts.user_id AS owes, t.paid_by AS "isOwed", SUM(ts.amount) AS amount
         FROM transaction_splits ts
         JOIN transactions t ON t.id = ts.transaction_id
         WHERE t.group_id IS NOT NULL
@@ -394,7 +394,7 @@ export const getAllSplitsForUser = async (userId: string): Promise<BalanceRow[]>
  */
 export const getAllSettlementsForUser = async (userId: string): Promise<BalanceRow[]> => {
     const query = `
-        SELECT paid_by AS owes, paid_to AS is_owed, SUM(amount) AS amount
+        SELECT paid_by AS owes, paid_to AS "isOwed", SUM(amount) AS amount
         FROM settlements
         WHERE paid_by = $1 OR paid_to = $1
         GROUP BY paid_by, paid_to
@@ -407,9 +407,9 @@ export const getAllSettlementsForUser = async (userId: string): Promise<BalanceR
  * Aggregated splits within a group, restricted to two users.
  * Used to validate a settlement's amount in combination with getgroupSettlementsBetweenUsers.
  */
-export const getGroupSplitsBetweenUsers = async (groupId: number, userA: string, userB: string): Promise<BalanceRow[]> => {
+export const getGroupSplitsBetweenUsers = async (groupId: string, userA: string, userB: string): Promise<BalanceRow[]> => {
     const query = `
-        SELECT ts.user_id AS owes, t.paid_by AS is_owed, SUM(ts.amount) AS amount
+        SELECT ts.user_id AS owes, t.paid_by AS "isOwed", SUM(ts.amount) AS amount
         FROM transaction_splits ts
         JOIN transactions t ON t.id = ts.transaction_id
         WHERE t.group_id = $1
@@ -425,9 +425,9 @@ export const getGroupSplitsBetweenUsers = async (groupId: number, userA: string,
  * Aggregated settlements within a group, restricted to two users.
  * Used to validate a settlement's amount along with getGroupSplitsBetweenUsers
  */
-export const getGroupSettlementsBetweenUsers = async (groupId: number, userA: string, userB: string): Promise<BalanceRow[]> => {
+export const getGroupSettlementsBetweenUsers = async (groupId: string, userA: string, userB: string): Promise<BalanceRow[]> => {
     const query = `
-        SELECT paid_by AS owes, paid_to AS is_owed, SUM(amount) AS amount
+        SELECT paid_by AS owes, paid_to AS "isOwed", SUM(amount) AS amount
         FROM settlements
         WHERE group_id = $1
         AND paid_by IN ($2, $3) AND paid_to IN ($2, $3)

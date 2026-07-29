@@ -10,20 +10,20 @@ import { CreateSettlementInput } from "./transactionSchemas.ts";
  * only for the full amount between the two users.
  */
 export const createSettlement = async (req: Request<{ groupId: string }, {}, CreateSettlementInput>, res: Response) => {
-    const groupId = Number(req.params.groupId);
-    const { userId, repayingUserId, amount } = req.body; // TEMPORARY: userId is receivingUserId until req.userId is sorted
-    const receivingUserId = userId;
+    const groupId = req.params.groupId;
+    const { repayingUserId, amount } = req.body; // TEMPORARY: userId is receivingUserId until req.userId is sorted
+    const userId = req.userId!;
 
-    if (repayingUserId === receivingUserId) {
+    if (repayingUserId === userId) {
         return res.status(400).json({ error: 'The same user cannot pay and be paid in the same settlement, please double check the users selected.' });
     }
 
     try {
-        const splitRows = await getGroupSplitsBetweenUsers(groupId, repayingUserId, receivingUserId);
-        const settlementRows = await getGroupSettlementsBetweenUsers(groupId, repayingUserId, receivingUserId);
+        const splitRows = await getGroupSplitsBetweenUsers(groupId, repayingUserId, userId);
+        const settlementRows = await getGroupSettlementsBetweenUsers(groupId, repayingUserId, userId);
 
         const net = computeNetBalances(splitRows, settlementRows, repayingUserId);
-        const amountOwed = net.get(receivingUserId) ?? 0;
+        const amountOwed = net.get(userId) ?? 0;
 
         if (amountOwed <= 0) {
             return res.status(400).json({ error: 'This member does not currently owe you anything in this group.' });
@@ -37,7 +37,7 @@ export const createSettlement = async (req: Request<{ groupId: string }, {}, Cre
             });
         }
 
-        const settlement = await insertSettlement(groupId, repayingUserId, receivingUserId, amount);
+        const settlement = await insertSettlement(groupId, userId, receivingUserId, amount);
         return res.status(201).json(settlement);
     } catch (err) {
         console.error('Create settlement error:', err);

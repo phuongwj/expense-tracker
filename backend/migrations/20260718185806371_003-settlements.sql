@@ -9,3 +9,5 @@ CREATE TABLE settlements (
   CONSTRAINT settlement_users_differ CHECK (paid_by <> paid_to)
 );
 -- Down Migration
+
+DROP TABLE IF EXISTS settlements;

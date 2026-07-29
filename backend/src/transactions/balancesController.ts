@@ -24,9 +24,9 @@ export const computeNetBalances = (splitRows: BalanceRow[], settlementRows: Bala
     const balances = new Map<string, number>();
 
     //the first loop gets all amounts owed, whether they've been paid already or not
-    for (const { owes, is_owed, amount } of splitRows) {
+    for (const { owes, isOwed, amount } of splitRows) {
         //if userId is the one who owes, then the other user is owed. 
-        const otherUser = owes === userId ? is_owed : owes;
+        const otherUser = owes === userId ? isOwed : owes;
         //check if there's an existing balance between the two users
         const existingBalance = balances.get(otherUser) ?? 0;
         balances.set(otherUser, existingBalance + (owes === userId ? Number(amount) : -Number(amount)));
@@ -34,8 +34,8 @@ export const computeNetBalances = (splitRows: BalanceRow[], settlementRows: Bala
 
     //this second loop gets all the amounts owed that were already paid, and then subtracts them from the map
     //so that all that's left are the amounts still owed
-    for (const { owes, is_owed, amount } of settlementRows) {
-        const otherUser = owes === userId ? is_owed : owes;
+    for (const { owes, isOwed, amount } of settlementRows) {
+        const otherUser = owes === userId ? isOwed : owes;
         const existingBalance = balances.get(otherUser) ?? 0;
         balances.set(otherUser, existingBalance - (owes === userId ? Number(amount) : -Number(amount)));
     }
@@ -48,8 +48,8 @@ export const computeNetBalances = (splitRows: BalanceRow[], settlementRows: Bala
  * Returns the authenticated user's net balance with each other member of the group.
  */
 export const getGroupBalances = async (req: Request<{ groupId: string }>, res: Response) => {
-    const groupId = Number(req.params.groupId);
-    const userId = (req.query.userId as string); // TEMPORARY until req.userId is sorted
+    const groupId = req.params.groupId;
+    const userId = req.userId!
 
     try {
         const splitRows = await getGroupSplitsForUser(groupId, userId);
@@ -82,7 +82,7 @@ export const getGroupBalances = async (req: Request<{ groupId: string }>, res: R
  * across all their groups, plus a summary total.
  */
 export const getGlobalBalances = async (req: Request, res: Response) => {
-    const userId = (req.query.userId as string); // TEMPORARY until req.userId is sorted
+    const userId = req.userId!;
 
     try {
         const splitRows = await getAllSplitsForUser(userId);
