@@ -7,6 +7,7 @@ import cookieParser from "cookie-parser";
 import authRoutes from "./auth/authRoutes.ts";
 import importExportRoutes from "./importExport/importExportRoutes.ts";
 import transactionRoutes from './transactions/transactionRoutes.ts';
+import groupRoutes from './groups/groupRoutes.ts';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -19,6 +20,9 @@ app.use("/api/ai", aiRoutes
 app.use('/api/transactions', transactionRoutes);
 //individual endpoints have either /import or /export prefix. ex: .../api/import/...
 app.use("/api", importExportRoutes);
+
+app.use('/api/groups', groupRoutes);
+
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

@@ -1,9 +1,6 @@
 import { z } from "zod";
 
 export const createTransactionSchema = z.object({
-    //userID is temporary part of input until JWT issue is resolved
-    userId: z.string(),
-
     type: z.enum(['expense', 'income'], { message: "Transaction type must be either 'expense' or 'income'." }),
     amount: z.number().positive("Transaction amount must be greater than zero."),
     categoryId: z.string().uuid().nullable().optional(),
@@ -18,9 +15,6 @@ export const createTransactionSchema = z.object({
 export type CreateTransactionInput = z.infer<typeof createTransactionSchema>;
 
 export const getTransactionsSchema = z.object({
-    //TEMPORARY:
-    userId: z.string(),
-
     startDate: z.iso.date("A valid start date is required.").optional(),
     endDate: z.iso.date("A valid end date is required.").optional(),
     type: z.enum(['expense', 'income']).optional(),
@@ -32,9 +26,6 @@ export type GetTransactionsInput = z.infer<typeof getTransactionsSchema>;
 
 //for now, assuming front end re-sends the entire transaction object w. the updated fields
 export const updateTransactionSchema = z.object({
-    //TEMPORARY:
-    userId: z.string(),
-
     type: z.enum(['expense', 'income']),
     amount: z.number().positive("Transaction amount must be greater than zero."),
     categoryId: z.string().uuid().nullable().optional(),
@@ -52,7 +43,6 @@ export const deleteTransactionSchema = z.object({
 export type TransactionIdParam = z.infer<typeof deleteTransactionSchema>;
 
 export const createGroupTransactionSchema = z.object({
-    userId: z.string(), // TEMPORARY: workaround until req.userId can be extracted from jwt 
     type: z.enum(['expense', 'income'], { message: "Transaction type must be either 'expense' or 'income'." }),
     amount: z.number().positive("Transaction amount must be greater than zero."),
     categoryId: z.string().nullable().optional(),

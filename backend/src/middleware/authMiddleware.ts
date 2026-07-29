@@ -1,13 +1,7 @@
 import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
 
-const JWT_SECRET = process.env.JWT_SECRET as string;
-
-export interface AuthenticatedRequest extends Request {
-  userId?: string;
-}
-
-export const requireAuth = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -17,8 +11,8 @@ export const requireAuth = (req: AuthenticatedRequest, res: Response, next: Next
   const token = authHeader.split(' ')[1];
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-    req.userId = decoded.userId; // available in any handler downstream
+    const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET as string) as { userId: string };
+    req.userId = decoded.userId;
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token.' });
