@@ -63,21 +63,20 @@ router.delete('/group/:groupId/:id', requireAuth, deleteGroup);
 
 //  ##### Balance & Settlement Routes #####
 
-//IMPORTANT: re-add middleware for user auth once issue with extracting user from jwt is solved
 
 /**
  * GET /api/transactions/balances    Returns the user's balance summary across all groups
  */
-router.get('/balances', /*auth middleware() ,*/ getGlobalBalances);
+router.get('/balances', requireAuth, getGlobalBalances);
 
 /**
  * GET /api/transactions/group/:groupId/balances    Returns the user's balances with each member of the given group
  */
-router.get('/group/:groupId/balances', /*auth middleware() ,*/ getGroupBalances);
+router.get('/group/:groupId/balances', requireAuth, getGroupBalances);
 
 /**
  * POST /api/transactions/group/:groupId/settlements    Records a settlement; only callable by the user being repaid
  */
-router.post('/group/:groupId/settlements', /*auth middleware() ,*/ validateBody(createSettlementSchema), createSettlement);
+router.post('/group/:groupId/settlements', requireAuth, validateBody(createSettlementSchema), createSettlement);
 
 export default router

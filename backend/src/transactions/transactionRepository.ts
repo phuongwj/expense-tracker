@@ -160,7 +160,7 @@ export const deletePersonalTransaction = async (transactionId: string, userId: s
  */
 export const createGroupTransaction = async (
     userId: string,
-    groupId: number,
+    groupId: string,
     paidBy: string,
     type: 'expense' | 'income',
     amount: number,
@@ -212,7 +212,7 @@ export const insertTransactionSplits = async (
  * Returns all transactions for a group, filtered by optional query params.
  */
 export const getGroupTransactions = async (
-    groupId: number,
+    groupId: string,
     filters: {
         startDate?: string;
         endDate?: string;
