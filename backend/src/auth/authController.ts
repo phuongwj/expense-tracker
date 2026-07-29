@@ -1,28 +1,37 @@
 import { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import jwt, { SignOptions } from "jsonwebtoken";
-import { randomBytes, createHash } from "crypto";
+import { randomBytes, randomInt, createHash } from "crypto";
 import {
     findUserByEmail,
+    findUserById,
     createUser,
     insertRefreshToken,
     findRefreshTokenByHash,
     revokeRefreshToken,
     revokeAllUserRefreshTokens,
+    insertPasswordResetToken,
+    findActiveResetTokenByUser,
+    incrementResetTokenAttempts,
+    markAllUserResetTokensUsed,
+    updateUserPassword,
 } from "./authRepository.ts";
-import { SignupInput, LoginInput } from "./authSchemas.ts";
+import { SignupInput, LoginInput, ForgotPasswordInput, ResetPasswordInput } from "./authSchemas.ts";
 import { toPublicUser } from "./authModel.ts";
+import { sendPasswordResetEmail } from "../config/email.ts";
 
-const JWT_SECRET = process.env.JWT_SECRET as string;
+const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET as string;
 const SALT_ROUNDS = Number(process.env.SALT_ROUNDS) || 10;
-const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN || '15m') as SignOptions['expiresIn'];
+const ACCESS_TOKEN_EXPIRES_IN = (process.env.ACCESS_TOKEN_EXPIRES_IN || '15m') as SignOptions['expiresIn'];
 const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS) || 30;
+const RESET_TOKEN_TTL_MINUTES = Number(process.env.RESET_TOKEN_TTL_MINUTES) || 10;
+const MAX_RESET_ATTEMPTS = 5;
 const COOKIE_NAME = 'refresh_token';
 
 /** Attaches the raw refresh token as an httpOnly cookie on the response. */
 const setRefreshCookie = (res: Response, token: string) => {
   res.cookie(COOKIE_NAME, token, {
-    httpOnly: true,                                       //protects against XSS attacks by hiding cookie from client-side JS
+    httpOnly: true,                                       // protects against XSS attacks by hiding cookie from client-side JS
     secure: process.env.NODE_ENV === 'production',        // enforces HTTPS connections (set to false only in local development)
     sameSite: 'strict',                                   // protects against Cross-Site Request Forgery (CSRF)
     path: '/api/auth',                                    // only sent to auth routes
@@ -53,7 +62,7 @@ const hashToken = (token: string): string =>
  *          the stored refreshTokenRecord (used to link rotation on refresh).
  */
 const issueTokenPair = async (userId: string) => {
-    const accessToken = jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const accessToken = jwt.sign({ userId }, ACCESS_TOKEN_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRES_IN });
 
     const refreshToken = randomBytes(40).toString('hex');
     const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);
@@ -174,5 +183,98 @@ export const logOut = async (req: Request, res: Response) => {
   } catch (err) {
     console.error('Logout error:', err);
     return res.status(500).json({ error: 'Something went wrong logging you out.' });
+  }
+};
+
+/**
+ * GET /me
+ * Returns the authenticated user's profile.
+ */
+export const getMe = async (req: Request, res: Response) => {
+  try {
+    const user = await findUserById(req.userId!);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    return res.status(200).json({ user: toPublicUser(user) });
+  } catch (err) {
+    console.error('Get me error:', err);
+    return res.status(500).json({ error: 'Something went wrong retrieving your profile.' });
+  }
+};
+
+/**
+ * POST /forgot-password
+ * Generates a 6-digit OTP and logs it to the console (email service TODO).
+ * Always returns 200 to prevent email enumeration.
+ */
+export const forgotPassword = async (req: Request<{}, {}, ForgotPasswordInput>, res: Response) => {
+  const { email } = req.body;
+
+  try {
+    const user = await findUserByEmail(email);
+
+    if (user) {
+      await markAllUserResetTokensUsed(user.id);
+
+      const otp = String(randomInt(100000, 999999));
+      const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MINUTES * 60 * 1000);
+      await insertPasswordResetToken(user.id, hashToken(otp), expiresAt);
+
+      await sendPasswordResetEmail(email, otp);
+    }
+
+    return res.status(200).json({
+      message: 'If an account with that email exists, a verification code has been sent.',
+    });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    return res.status(500).json({ error: 'Something went wrong processing your request.' });
+  }
+};
+
+/**
+ * POST /reset-password
+ * Validates the OTP, updates the password, and invalidates all sessions.
+ * Locks out after MAX_RESET_ATTEMPTS failed tries.
+ */
+export const resetPassword = async (req: Request<{}, {}, ResetPasswordInput>, res: Response) => {
+  const { email, code, password } = req.body;
+
+  try {
+    const user = await findUserByEmail(email);
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or expired verification code.' });
+    }
+
+    const tokenRecord = await findActiveResetTokenByUser(user.id);
+
+    if (!tokenRecord) {
+      return res.status(400).json({ error: 'Invalid or expired verification code.' });
+    }
+
+    if (tokenRecord.attempts >= MAX_RESET_ATTEMPTS) {
+      await markAllUserResetTokensUsed(user.id);
+      return res.status(429).json({ error: 'Too many attempts. Please request a new code.' });
+    }
+
+    if (hashToken(code) !== tokenRecord.codeHash) {
+      await incrementResetTokenAttempts(tokenRecord.id);
+      return res.status(400).json({ error: 'Invalid or expired verification code.' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    await updateUserPassword(user.id, passwordHash);
+    await markAllUserResetTokensUsed(user.id);
+    await revokeAllUserRefreshTokens(user.id);
+
+    return res.status(200).json({
+      message: 'Password has been reset successfully. Please log in with your new password.',
+    });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    return res.status(500).json({ error: 'Something went wrong resetting your password.' });
   }
 };

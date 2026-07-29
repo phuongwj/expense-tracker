@@ -30,3 +30,13 @@ export interface RefreshToken {
     replacedByTokenId: string | null;
     createdAt: Date;
 }
+
+export interface PasswordResetToken {
+    id: string;
+    userId: string;
+    codeHash: string;
+    expiresAt: Date;
+    usedAt: Date | null;
+    attempts: number;
+    createdAt: Date;
+}

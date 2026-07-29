@@ -1,0 +1,13 @@
+{
+  "name": "@expense-tracker/shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./auth": "./src/auth.ts",
+    "./groups": "./src/groups.ts"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}
