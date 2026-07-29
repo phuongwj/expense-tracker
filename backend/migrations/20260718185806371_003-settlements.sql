@@ -1,7 +1,7 @@
 -- Up Migration
 CREATE TABLE settlements (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  group_id INTEGER NOT NULL, -- TODO: change to foreign key once Group table is added. 
+  group_id UUID NOT NULL REFERENCES groups(id),
   paid_by UUID NOT NULL REFERENCES users(id),
   paid_to UUID NOT NULL REFERENCES users(id),
   amount DECIMAL(10,2) NOT NULL CHECK (amount > 0),
