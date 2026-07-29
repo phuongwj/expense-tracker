@@ -23,7 +23,7 @@ export const createPersonalTransaction = async (
             category_id AS "categoryId",
             type,
             amount,
-            transaction_date AS "transactionDate",
+            transaction_date AS "transactionDate" ,
             description,
             is_recurring AS "isRecurring",
             recurring_interval AS "recurringInterval"
@@ -117,7 +117,8 @@ export const updatePersonalTransaction = async (
     const query = `
         UPDATE transactions
         SET amount = $1, type = $2, category_id = $3, transaction_date = $4,
-            description = $5, is_recurring = $6, recurring_interval = $7
+            description = $5, is_recurring = $6, recurring_interval = $7,
+            updated_at = now()
         WHERE id = $8 AND user_id = $9 AND group_id IS NULL
         RETURNING
             id,
@@ -280,6 +281,7 @@ export const getGroupTransactions = async (
 
 export const updateGroupTransaction = async (
     transactionId: string,
+    groupId: string,
     type: 'expense' | 'income',
     amount: number,
     categoryId: string | null,
@@ -291,8 +293,9 @@ export const updateGroupTransaction = async (
     const query = `
         UPDATE transactions
         SET type = $1, amount = $2, category_id = $3, transaction_date = $4,
-            decription = $5, is_recurring = $6, recurring_interval = $7
-        WHERE id = $8 AND group_id IS NOT NULL
+            description = $5, is_recurring = $6, recurring_interval = $7,
+            updated_at = now()
+        WHERE id = $8 AND group_id = $9
         RETURNING
             id,
             user_id AS "userId",
@@ -307,15 +310,15 @@ export const updateGroupTransaction = async (
             recurring_interval AS "recurringInterval"
     `;
 
-    const result = await pool.query(query, [type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval, transactionId]);
+    const result = await pool.query(query, [type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval, transactionId, groupId]);
     return result.rows[0] || null;
 }
 
 
-export const deleteGroupTransaction = async (transactionId: string): Promise<boolean> => {
+export const deleteGroupTransaction = async (transactionId: string, groupId: string): Promise<boolean> => {
     const result = await pool.query(
-        `DELETE FROM transactions WHERE id = $1 AND group_id IS NOT NULL`,
-        [transactionId]
+        `DELETE FROM transactions WHERE id = $1 AND group_id = $2`,
+        [transactionId, groupId]
     );
     return (result.rowCount ?? 0) > 0;
 }
