@@ -21,7 +21,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/ai", aiRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/categories', categoryRoutes);
-app.use('/api/ai', aiRoutes);
+
 //individual endpoints have either /import or /export prefix. ex: .../api/import/...
 app.use("/api", importExportRoutes);
 
