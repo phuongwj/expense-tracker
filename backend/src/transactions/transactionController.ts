@@ -120,7 +120,7 @@ export const deletePersonal = async (req: Request<{ id: string }, {}, {}>, res: 
  */
 export const createGroup = async (req: Request<{ groupId: string }, {}, CreateGroupTransactionInput>, res: Response) => {
     const userId = req.userId!;
-    const groupId = Number(req.params.groupId);
+    const groupId = req.params.groupId;
     const { type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval, paidBy, splits } = req.body;
 
     const payer = paidBy ?? userId;
@@ -155,7 +155,7 @@ export const createGroup = async (req: Request<{ groupId: string }, {}, CreateGr
  * Returns transactions for a group, optionally filtered.
  */
 export const getGroup = async (req: Request<{ groupId: string }>, res: Response) => {
-    const groupId = Number(req.params.groupId);
+    const groupId = req.params.groupId;
     const filters = (req as any).validatedQuery;
 
     try {

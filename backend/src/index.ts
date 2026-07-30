@@ -16,7 +16,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.use("/api/auth", authRoutes);
-app.use("/api/ai", aiRoutes
+app.use("/api/ai", aiRoutes);
 app.use('/api/transactions', transactionRoutes);
 //individual endpoints have either /import or /export prefix. ex: .../api/import/...
 app.use("/api", importExportRoutes);
