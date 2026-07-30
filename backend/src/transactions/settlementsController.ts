@@ -6,24 +6,24 @@ import { CreateSettlementInput } from "./transactionSchemas.ts";
 
 /**
  * POST /transactions/group/:groupId/settlements
- * Creates a Settlement. Only the person being repaid can create one, and
- * only for the full amount between the two users.
+ * Creates a Settlement. Only the person being repaid can create one, IE: userId for this request is the user being repayed. 
+ * A limitation for scope is that settlements can only be for the full amount between the two users.
  */
 export const createSettlement = async (req: Request<{ groupId: string }, {}, CreateSettlementInput>, res: Response) => {
     const groupId = req.params.groupId;
-    const { repayingUserId, amount } = req.body; // TEMPORARY: userId is receivingUserId until req.userId is sorted
-    const userId = req.userId!;
+    const { repayingUserId, amount } = req.body;
+    const receivingUserId = req.userId!;
 
-    if (repayingUserId === userId) {
+    if (repayingUserId === receivingUserId) {
         return res.status(400).json({ error: 'The same user cannot pay and be paid in the same settlement, please double check the users selected.' });
     }
 
     try {
-        const splitRows = await getGroupSplitsBetweenUsers(groupId, repayingUserId, userId);
-        const settlementRows = await getGroupSettlementsBetweenUsers(groupId, repayingUserId, userId);
+        const splitRows = await getGroupSplitsBetweenUsers(groupId, repayingUserId, receivingUserId);
+        const settlementRows = await getGroupSettlementsBetweenUsers(groupId, repayingUserId, receivingUserId);
 
         const net = computeNetBalances(splitRows, settlementRows, repayingUserId);
-        const amountOwed = net.get(userId) ?? 0;
+        const amountOwed = net.get(receivingUserId) ?? 0;
 
         if (amountOwed <= 0) {
             return res.status(400).json({ error: 'This member does not currently owe you anything in this group.' });
@@ -37,7 +37,7 @@ export const createSettlement = async (req: Request<{ groupId: string }, {}, Cre
             });
         }
 
-        const settlement = await insertSettlement(groupId, userId, receivingUserId, amount);
+        const settlement = await insertSettlement(groupId, repayingUserId, receivingUserId, amount);
         return res.status(201).json(settlement);
     } catch (err) {
         console.error('Create settlement error:', err);
