@@ -1,5 +1,5 @@
 import pool from "../config/db.ts";
-import { Transaction, TransactionSplit } from "./transactionModel.ts";
+import { Transaction, TransactionSplit, BalanceRow, Settlement } from "./transactionModel.ts";
 
 
 export const createPersonalTransaction = async (
@@ -163,7 +163,7 @@ export const deletePersonalTransaction = async (transactionId: string, userId: s
  */
 export const createGroupTransaction = async (
     userId: string,
-    groupId: number,
+    groupId: string,
     paidBy: string,
     type: 'expense' | 'income',
     amount: number,
@@ -225,7 +225,7 @@ export const insertTransactionSplits = async (
  * Returns all transactions for a group, filtered by optional query params.
  */
 export const getGroupTransactions = async (
-    groupId: number,
+    groupId: string,
     filters: {
         startDate?: string;
         endDate?: string;
@@ -337,4 +337,118 @@ export const deleteGroupTransaction = async (transactionId: string, groupId: str
         [transactionId, groupId]
     );
     return (result.rowCount ?? 0) > 0;
+}
+
+export const insertSettlement = async (groupId: string, paidBy: string, paidTo: string, amount: number): Promise<Settlement> => {
+    const query = `
+        INSERT INTO settlements (group_id, paid_by, paid_to, amount)
+        VALUES ($1, $2, $3, $4)
+        RETURNING
+            id,
+            group_id AS "groupId",
+            paid_by AS "paidBy",
+            paid_to AS "paidTo",
+            amount,
+            settled_at AS "settledAt"
+    `;
+    const result = await pool.query(query, [groupId, paidBy, paidTo, amount]);
+    return result.rows[0];
+}
+/* Gets all transaction split total amounts (either paid or still owed) between the user and members 
+* of a given group. Used in combination with the get settlements query to calculate active balances
+*/
+export const getGroupSplitsForUser = async (groupId: string, userId: string): Promise<BalanceRow[]> => {
+    const query = `
+        SELECT ts.user_id AS owes, t.paid_by AS "isOwed", SUM(ts.amount) AS amount
+        FROM transaction_splits ts
+        JOIN transactions t ON t.id = ts.transaction_id
+        WHERE t.group_id = $1
+        AND ts.user_id != t.paid_by
+        AND (ts.user_id = $2 OR t.paid_by = $2)
+        GROUP BY ts.user_id, t.paid_by
+    `;
+    const result = await pool.query(query, [groupId, userId]);
+    return result.rows;
+}
+/*
+* Gets all settlements for a user and members of a given group. Used in combination with the getGroupSplits query
+* in order to calculate active balances. 
+*/
+export const getGroupSettlementsForUser = async (groupId: string, userId: string): Promise<BalanceRow[]> => {
+    const query = `
+        SELECT paid_by AS owes, paid_to AS "isOwed", SUM(amount) AS amount
+        FROM settlements
+        WHERE group_id = $1
+        AND (paid_by = $2 OR paid_to = $2)
+        GROUP BY paid_by, paid_to
+    `;
+    const result = await pool.query(query, [groupId, userId]);
+    return result.rows;
+}
+
+/**
+ * Same as getGroupSplitsForUser but across every group userId belongs to.
+ * Used for the global balance summary.
+ */
+export const getAllSplitsForUser = async (userId: string): Promise<BalanceRow[]> => {
+    const query = `
+        SELECT ts.user_id AS owes, t.paid_by AS "isOwed", SUM(ts.amount) AS amount
+        FROM transaction_splits ts
+        JOIN transactions t ON t.id = ts.transaction_id
+        WHERE t.group_id IS NOT NULL
+        AND ts.user_id != t.paid_by
+        AND (ts.user_id = $1 OR t.paid_by = $1)
+        GROUP BY ts.user_id, t.paid_by
+    `;
+    const result = await pool.query(query, [userId]);
+    return result.rows;
+}
+
+/**
+ * Same as getGroupSettlementsForUser but across every group userId belongs to.
+ * Used for the global balance summary in combination with getAllSplitsForUser.
+ */
+export const getAllSettlementsForUser = async (userId: string): Promise<BalanceRow[]> => {
+    const query = `
+        SELECT paid_by AS owes, paid_to AS "isOwed", SUM(amount) AS amount
+        FROM settlements
+        WHERE paid_by = $1 OR paid_to = $1
+        GROUP BY paid_by, paid_to
+    `;
+    const result = await pool.query(query, [userId]);
+    return result.rows;
+}
+
+/**
+ * Aggregated splits within a group, restricted to two users.
+ * Used to validate a settlement's amount in combination with getgroupSettlementsBetweenUsers.
+ */
+export const getGroupSplitsBetweenUsers = async (groupId: string, userA: string, userB: string): Promise<BalanceRow[]> => {
+    const query = `
+        SELECT ts.user_id AS owes, t.paid_by AS "isOwed", SUM(ts.amount) AS amount
+        FROM transaction_splits ts
+        JOIN transactions t ON t.id = ts.transaction_id
+        WHERE t.group_id = $1
+        AND ts.user_id != t.paid_by
+        AND ts.user_id IN ($2, $3) AND t.paid_by IN ($2, $3)
+        GROUP BY ts.user_id, t.paid_by
+    `;
+    const result = await pool.query(query, [groupId, userA, userB]);
+    return result.rows;
+}
+
+/**
+ * Aggregated settlements within a group, restricted to two users.
+ * Used to validate a settlement's amount along with getGroupSplitsBetweenUsers
+ */
+export const getGroupSettlementsBetweenUsers = async (groupId: string, userA: string, userB: string): Promise<BalanceRow[]> => {
+    const query = `
+        SELECT paid_by AS owes, paid_to AS "isOwed", SUM(amount) AS amount
+        FROM settlements
+        WHERE group_id = $1
+        AND paid_by IN ($2, $3) AND paid_to IN ($2, $3)
+        GROUP BY paid_by, paid_to
+    `;
+    const result = await pool.query(query, [groupId, userA, userB]);
+    return result.rows;
 }

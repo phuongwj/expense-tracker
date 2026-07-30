@@ -3,6 +3,7 @@
 ## Table of Contents
 
 - [Auth API](#auth-api)
+- [Groups API](#groups-api)
 
 
 ## Auth API
@@ -259,3 +260,224 @@ Forgot password
   -> User enters code + new password → POST /reset-password
   -> All sessions revoked, user must log in again
 ```
+
+---
+
+## Groups API
+
+All group endpoints are under `/api/groups` and require a valid access token in the `Authorization: Bearer <token>` header.
+
+| Method | Endpoint                              | Description                                      |
+| ------ | ------------------------------------- | ------------------------------------------------ |
+| POST   | `/api/groups`                         | Create a new group                               |
+| POST   | `/api/groups/join`                    | Join a group using its invite code               |
+| GET    | `/api/groups`                         | List all groups the current user belongs to      |
+| GET    | `/api/groups/:id`                     | Get group details and member list                |
+| PATCH  | `/api/groups/:id/regenerate-code`     | Generate a new invite code (leader only)         |
+| DELETE | `/api/groups/:id/members/:userId`     | Remove a member or leave the group               |
+| DELETE | `/api/groups/:id`                     | Delete the group entirely (leader only)          |
+
+### POST /api/groups
+
+Creates a new group. The creator automatically becomes the group leader.
+
+**Request body:**
+```json
+{
+  "name": "Roommates"
+}
+```
+
+| Field | Type   | Rules                          |
+| ----- | ------ | ------------------------------ |
+| name  | string | required, trimmed, 1–100 chars |
+
+**Success (201):**
+```json
+{
+  "group": {
+    "id": "uuid",
+    "name": "Roommates",
+    "joinCode": "AB3X9K2P",
+    "createdBy": "uuid",
+    "createdAt": "...",
+    "updatedAt": "..."
+  }
+}
+```
+
+**Errors:**
+
+| Status | When                    |
+| ------ | ----------------------- |
+| 400    | Missing/empty name      |
+| 401    | Not authenticated       |
+| 500    | Server error            |
+
+### POST /api/groups/join
+
+Joins a group using its invite code. The user becomes a regular member.
+
+**Request body:**
+```json
+{
+  "joinCode": "AB3X9K2P"
+}
+```
+
+| Field    | Type   | Rules    |
+| -------- | ------ | -------- |
+| joinCode | string | required |
+
+**Success (200):**
+```json
+{
+  "group": {
+    "id": "uuid",
+    "name": "Roommates",
+    "role": "member"
+  }
+}
+```
+
+**Errors:**
+
+| Status | When                              |
+| ------ | --------------------------------- |
+| 400    | Missing code                      |
+| 401    | Not authenticated                 |
+| 404    | Code doesn't match any group      |
+| 409    | Already a member of this group    |
+| 500    | Server error                      |
+
+### GET /api/groups
+
+Lists all groups the current user belongs to.
+
+**Success (200):**
+```json
+{
+  "groups": [
+    {
+      "id": "uuid",
+      "name": "Roommates",
+      "role": "leader"
+    },
+    {
+      "id": "uuid",
+      "name": "Ski Trip",
+      "role": "member"
+    }
+  ]
+}
+```
+
+**Errors:**
+
+| Status | When              |
+| ------ | ----------------- |
+| 401    | Not authenticated |
+| 500    | Server error      |
+
+### GET /api/groups/:id
+
+Returns group details and the full member list. Requires the requesting user to be a member. The `joinCode` is only included if the requesting user is the leader.
+
+**Success (200):**
+```json
+{
+  "group": {
+    "id": "uuid",
+    "name": "Roommates",
+    "createdBy": "uuid",
+    "createdAt": "...",
+    "joinCode": "AB3X9K2P"
+  },
+  "members": [
+    {
+      "userId": "uuid",
+      "firstName": "Alice",
+      "lastName": "Smith",
+      "role": "leader",
+      "joinedAt": "..."
+    }
+  ]
+}
+```
+
+**Errors:**
+
+| Status | When                          |
+| ------ | ----------------------------- |
+| 401    | Not authenticated             |
+| 403    | Not a member of this group    |
+| 404    | Group doesn't exist           |
+| 500    | Server error                  |
+
+**Note:** `joinCode` is only included in the response if the requesting user's role is `leader`.
+
+### PATCH /api/groups/:id/regenerate-code
+
+Invalidates the current invite code and issues a new one. Leader only.
+
+**Request body:** None.
+
+**Success (200):**
+```json
+{
+  "joinCode": "ZQ7T2M5N"
+}
+```
+
+**Errors:**
+
+| Status | When                          |
+| ------ | ----------------------------- |
+| 401    | Not authenticated             |
+| 403    | Not a member or not the leader |
+| 404    | Group doesn't exist           |
+| 500    | Server error                  |
+
+### DELETE /api/groups/:id/members/:userId
+
+Removes a member from the group. The leader can remove anyone. Regular members can only remove themselves (leave the group). The leader cannot leave while other members remain — they must transfer leadership first.
+
+**Request body:** None.
+
+**Success (200):**
+```json
+{
+  "message": "Member removed."
+}
+```
+
+**Errors:**
+
+| Status | When                                                    |
+| ------ | ------------------------------------------------------- |
+| 401    | Not authenticated                                       |
+| 403    | Not the leader and not removing yourself                |
+| 404    | Member not found in group                               |
+| 409    | Leader trying to leave while other members remain       |
+| 500    | Server error                                            |
+
+### DELETE /api/groups/:id
+
+Deletes the group entirely. Leader only. All members are removed (cascade delete).
+
+**Request body:** None.
+
+**Success (200):**
+```json
+{
+  "message": "Group deleted."
+}
+```
+
+**Errors:**
+
+| Status | When                    |
+| ------ | ----------------------- |
+| 401    | Not authenticated       |
+| 403    | Not the leader          |
+| 500    | Server error            |
