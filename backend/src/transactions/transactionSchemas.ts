@@ -6,7 +6,10 @@ export {
     updateTransactionSchema,
     createGroupTransactionSchema,
     updateGroupTransactionSchema,
-    createSettlementSchema,
+    createSettlementSchema
+} from "@expense-tracker/shared/transactions";
+
+export type {
     CreateTransactionInput,
     GetTransactionsInput,
     UpdateTransactionInput,
