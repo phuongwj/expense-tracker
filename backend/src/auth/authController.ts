@@ -22,9 +22,9 @@ import { SignupInput, LoginInput, ForgotPasswordInput, ResetPasswordInput } from
 import { toPublicUser } from "./authModel.ts";
 import { sendPasswordResetEmail } from "../config/email.ts";
 
-const JWT_SECRET = process.env.JWT_SECRET as string;
+const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET as string;
 const SALT_ROUNDS = Number(process.env.SALT_ROUNDS) || 10;
-const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN || '15m') as SignOptions['expiresIn'];
+const ACCESS_TOKEN_EXPIRES_IN = (process.env.ACCESS_TOKEN_EXPIRES_IN || '15m') as SignOptions['expiresIn'];
 const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS) || 30;
 const RESET_TOKEN_TTL_MINUTES = Number(process.env.RESET_TOKEN_TTL_MINUTES) || 10;
 const MAX_RESET_ATTEMPTS = 5;
@@ -64,7 +64,7 @@ const hashToken = (token: string): string =>
  *          the stored refreshTokenRecord (used to link rotation on refresh).
  */
 const issueTokenPair = async (userId: string) => {
-    const accessToken = jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const accessToken = jwt.sign({ userId }, ACCESS_TOKEN_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRES_IN });
 
     const refreshToken = randomBytes(40).toString('hex');
     const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);

@@ -1,7 +1,7 @@
 export interface Transaction {
     id: string;
     userId: string;
-    groupId: number | null; //temporary until Group Entity is added, then this will get changed to string | null
+    groupId: string;
     paidBy: string | null;
     categoryId: string | null;
     type: 'expense' | 'income';
@@ -21,7 +21,7 @@ export interface TransactionSplit {
 
 export interface Settlement {
     id: string;
-    groupId: number; //TODO: Change from number to string once Group table is added 
+    groupId: string;
     paidBy: string;
     paidTo: string;
     amount: number;
@@ -31,6 +31,6 @@ export interface Settlement {
 //Used for Settlement-related queries, contains two userIDs (one who owes the other)
 export interface BalanceRow {
     owes: string;
-    is_owed: string;
+    isOwed: string;
     amount: string;
 }

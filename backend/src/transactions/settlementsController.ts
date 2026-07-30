@@ -8,12 +8,12 @@ import { BadRequestError } from "../errors/AppError.ts";
 
 /**
  * POST /transactions/group/:groupId/settlements
- * Creates a Settlement. Only the person being repaid can create one, and
- * only for the full amount between the two users.
+ * Creates a Settlement. Only the person being repaid can create one, IE: userId for this request is the user being repayed. 
+ * A limitation for scope is that settlements can only be for the full amount between the two users.
  */
 export const createSettlement = asyncHandler (async (req: Request<{ groupId: string }, {}, CreateSettlementInput>, res: Response) => {
-    const groupId = Number(req.params.groupId);
-    const {repayingUserId, amount } = req.body;
+    const groupId = req.params.groupId;
+    const { repayingUserId, amount } = req.body;
     const receivingUserId = req.userId!;
 
     if (repayingUserId === receivingUserId) {

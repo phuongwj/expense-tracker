@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./auth": "./src/auth.ts",
+    "./groups": "./src/groups.ts",
     "./transactions": "./src/transactions.ts"
   },
   "dependencies": {

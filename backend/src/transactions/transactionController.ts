@@ -113,7 +113,7 @@ export const createGroup = asyncHandler (async (
     res: Response
 ) => {
     const userId = req.userId!;
-    const groupId = Number(req.params.groupId);
+    const groupId = req.params.groupId;
     const { 
         type, 
         amount, 
@@ -161,7 +161,7 @@ export const getGroup = asyncHandler (async (
     req: Request<{ groupId: string }>,
     res: Response
 ) => {
-    const groupId = Number(req.params.groupId);
+    const groupId = req.params.groupId;
     const filters = (req as any).validatedQuery;
 
     const transactions = await getGroupTransactions(groupId, filters);

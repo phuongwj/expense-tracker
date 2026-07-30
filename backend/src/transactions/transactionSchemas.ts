@@ -7,6 +7,12 @@ export {
     createGroupTransactionSchema,
     updateGroupTransactionSchema,
     createSettlementSchema,
+    CreateTransactionInput,
+    GetTransactionsInput,
+    UpdateTransactionInput,
+    CreateGroupTransactionInput,
+    UpdateGroupTransactionInput,
+    CreateSettlementInput
 } from "@expense-tracker/shared/transactions";
 
 export const deleteTransactionSchema = z.object({
@@ -15,11 +21,5 @@ export const deleteTransactionSchema = z.object({
 
 export type TransactionIdParam = z.infer<typeof deleteTransactionSchema>;
 
-export type {
-    CreateTransactionInput,
-    GetTransactionsInput,
-    UpdateTransactionInput,
-    CreateGroupTransactionInput,
-    UpdateGroupTransactionInput,
-    CreateSettlementInput
-} from "@expense-tracker/shared/transactions";
+
+

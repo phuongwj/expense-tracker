@@ -2,9 +2,10 @@ import express from 'express'
 import { createPersonal, getPersonal, updatePersonal, deletePersonal,
         createGroup, getGroup, updateGroup, deleteGroup
  } from "./transactionController.ts"
-import { validateBody, validateQuery, validateParams } from "../middleware/validateRequest.ts"
+
 import { getGroupBalances, getGlobalBalances } from "./balancesController.ts"
 import { createSettlement } from "./settlementsController.ts"
+import { validateBody, validateQuery, validateParams } from "../middleware/validateRequest.ts"
 import { 
     createTransactionSchema, 
     getTransactionsSchema, 
@@ -13,7 +14,7 @@ import {
     createGroupTransactionSchema,
     createSettlementSchema,
     updateGroupTransactionSchema } from "./transactionSchemas.ts"
-import { requireAuth } from "../middleware/authMiddleware.ts"
+import { requireAuth, requireGroupMember } from "../middleware/authMiddleware.ts"
 
 const router = express.Router()
 
@@ -43,22 +44,23 @@ router.delete('/:id', requireAuth, validateParams(deleteTransactionSchema), dele
 /**
  * GET /api/transactions/group/:groupId     Returns Group Transactions for the given group, optionally filtered by query parameters
  */
-router.get('/group/:groupId', requireAuth, validateQuery(getTransactionsSchema), getGroup);
+router.get('/group/:groupId', requireAuth, requireGroupMember, validateQuery(getTransactionsSchema), getGroup);
 
 /**
  * POST /api/transactions/group/:groupId    Creates a new Group Transaction for the given group
  */
-router.post('/group/:groupId', requireAuth, validateBody(createGroupTransactionSchema), createGroup);
+router.post('/group/:groupId', requireAuth, requireGroupMember, validateBody(createGroupTransactionSchema), createGroup);
 
 /**
  * PUT /api/transactions/group/:groupId/:id    Updates a group transaction.
  */
-router.put('/group/:groupId/:id', requireAuth, validateBody(updateGroupTransactionSchema), updateGroup);
+router.put('/group/:groupId/:id', requireAuth, requireGroupMember, validateBody(updateGroupTransactionSchema), updateGroup);
 
 /**
  * DELETE /api/transactions/group/:groupId/:id   Delete a group transaction.
  */
-router.delete('/group/:groupId/:id', requireAuth, deleteGroup);
+router.delete('/group/:groupId/:id', requireAuth, requireGroupMember, deleteGroup);
+
 
 //  ##### Balance & Settlement Routes #####
 
@@ -71,11 +73,11 @@ router.get('/balances', requireAuth, getGlobalBalances);
 /**
  * GET /api/transactions/group/:groupId/balances    Returns the user's balances with each member of the given group
  */
-router.get('/group/:groupId/balances', requireAuth, getGroupBalances);
+router.get('/group/:groupId/balances', requireAuth, requireGroupMember, getGroupBalances);
 
 /**
  * POST /api/transactions/group/:groupId/settlements    Records a settlement; only callable by the user being repaid
  */
-router.post('/group/:groupId/settlements', requireAuth, validateBody(createSettlementSchema), createSettlement);
+router.post('/group/:groupId/settlements', requireAuth, requireGroupMember, validateBody(createSettlementSchema), createSettlement);
 
 export default router
