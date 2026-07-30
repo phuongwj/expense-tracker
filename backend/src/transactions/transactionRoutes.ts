@@ -2,6 +2,8 @@ import express from 'express'
 import { createPersonal, getPersonal, updatePersonal, deletePersonal,
         createGroup, getGroup, updateGroup, deleteGroup
  } from "./transactionController.ts"
+import { getGroupBalances, getGlobalBalances } from "./balancesController.ts"
+import { createSettlement } from "./settlementsController.ts"
 import { validateBody, validateQuery, validateParams } from "../middleware/validateRequest.ts"
 import { 
     createTransactionSchema, 
@@ -9,7 +11,8 @@ import {
     updateTransactionSchema,
     deleteTransactionSchema,
     createGroupTransactionSchema,
-    updateGroupTransactionSchema } from "./transactionSchemas.ts"
+    updateGroupTransactionSchema,
+    createSettlementSchema } from "./transactionSchemas.ts"
 import { requireAuth } from "../middleware/authMiddleware.ts"
 
 const router = express.Router()
@@ -56,5 +59,24 @@ router.put('/group/:groupId/:id', requireAuth, validateBody(updateGroupTransacti
  * DELETE /api/transactions/group/:groupId/:id   Delete a group transaction.
  */
 router.delete('/group/:groupId/:id', requireAuth, deleteGroup);
+
+
+//  ##### Balance & Settlement Routes #####
+
+
+/**
+ * GET /api/transactions/balances    Returns the user's balance summary across all groups
+ */
+router.get('/balances', requireAuth, getGlobalBalances);
+
+/**
+ * GET /api/transactions/group/:groupId/balances    Returns the user's balances with each member of the given group
+ */
+router.get('/group/:groupId/balances', requireAuth, getGroupBalances);
+
+/**
+ * POST /api/transactions/group/:groupId/settlements    Records a settlement; only callable by the user being repaid
+ */
+router.post('/group/:groupId/settlements', requireAuth, validateBody(createSettlementSchema), createSettlement);
 
 export default router

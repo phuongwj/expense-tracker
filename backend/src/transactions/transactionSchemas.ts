@@ -78,3 +78,10 @@ export const updateGroupTransactionSchema = z.object({
 
 export type UpdateGroupTransactionInput = z.infer<typeof updateGroupTransactionSchema>;
 
+export const createSettlementSchema = z.object({
+    repayingUserId: z.string(),
+    amount: z.number().positive("Settlement amount must be greater than zero.")
+});
+
+export type CreateSettlementInput = z.infer<typeof createSettlementSchema>;
+
