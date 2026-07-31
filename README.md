@@ -176,6 +176,99 @@ node_modules/@expense-tracker/shared → ../../packages/shared
 
 See [API_DOCS.md](API_DOCS.md) for full request/response docs for all endpoints.
 
+## Core Feature 3: Import / Export
+
+The current Core Feature 3 flow is wired to real backend endpoints from the frontend UI.
+
+### Implemented frontend-to-backend flow
+
+- `GET /import-csv` opens the CSV import page
+- `POST /api/import/preview` generates a real backend preview from uploaded CSV content
+- `POST /api/import/confirm` confirms selected valid rows and stores them in the backend import/export mock store
+- `GET /export` opens the export page
+- `POST /api/export/preview` generates a real backend export preview from the backend mock store
+- `GET /api/export/csv` downloads a CSV file built from the backend mock store
+
+### Important limitation
+
+This branch uses the existing backend mock-backed import/export module.
+
+- Imported rows are stored in memory only
+- They are not written to the real PostgreSQL `transactions` table yet
+- Export preview and CSV download read from that in-memory import/export store
+- Data is reset when the backend server restarts
+- PDF export is not implemented on this branch
+
+### How to test Core Feature 3
+
+#### 1. Start the backend
+
+From `backend/`:
+
+```bash
+npm install
+npm start
+```
+
+#### 2. Start the frontend
+
+From `frontend/`:
+
+```bash
+npm install
+npm run dev
+```
+
+#### 3. Test import preview
+
+1. Open the app and log in
+2. Go to `Transactions -> Import CSV`
+3. Upload a `.csv` file with required columns:
+   - `date`
+   - `description`
+   - `amount`
+   - `type`
+   - `category`
+4. The page calls `POST /api/import/preview`
+5. The UI should show:
+   - total row count
+   - valid rows
+   - invalid rows
+   - validation errors for rejected rows
+
+#### 4. Test import confirm
+
+1. On the preview screen, leave valid rows selected or uncheck any rows you do not want to import
+2. Click `Import ... rows`
+3. The page calls `POST /api/import/confirm`
+4. The UI should show saved/skipped counts
+
+#### 5. Test export preview
+
+1. Go to `Transactions -> Export`
+2. Use the available type, category, and date filters
+3. Click `Refresh preview`
+4. The page calls `POST /api/export/preview`
+5. The UI should show:
+   - row count
+   - total income
+   - total expenses
+   - net amount
+   - preview rows from the backend mock store
+
+#### 6. Test CSV download
+
+1. On the Export page, keep the format set to `CSV`
+2. Click `Download CSV`
+3. The page calls `GET /api/export/csv`
+4. A file named `mock-transactions-export.csv` should download
+
+### Notes for teammates
+
+- The import/export frontend now calls real backend endpoints instead of frontend mock rows
+- The backend import/export module is still intentionally mock-backed for this PR
+- If you restart the backend server, previously imported rows used for export preview/download will be cleared
+
 
 ## Database migrations
 
