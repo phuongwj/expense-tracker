@@ -7,6 +7,7 @@ import cookieParser from "cookie-parser";
 import authRoutes from "./auth/authRoutes.ts";
 import importExportRoutes from "./importExport/importExportRoutes.ts";
 import transactionRoutes from './transactions/transactionRoutes.ts';
+import categoryRoutes from './categories/categoryRoutes.ts';
 import groupRoutes from './groups/groupRoutes.ts';
 
 const app = express();
@@ -18,6 +19,7 @@ app.use(cookieParser());
 app.use("/api/auth", authRoutes);
 app.use("/api/ai", aiRoutes);
 app.use('/api/transactions', transactionRoutes);
+app.use('/api/categories', categoryRoutes);
 //individual endpoints have either /import or /export prefix. ex: .../api/import/...
 app.use("/api", importExportRoutes);
 
