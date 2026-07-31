@@ -1,5 +1,6 @@
 import {
   InsightsSummary,
+  ReceiptDocumentType,
   ReceiptExtractionRequestBody,
 } from "./aiSchemas.ts";
 
@@ -32,9 +33,11 @@ export interface AiServiceFailure {
 export type AiServiceResult = AiServiceSuccess | AiServiceFailure;
 
 export interface ReceiptExtractionMicroservicePayload {
+  fileBuffer?: Buffer;
   fileName: string;
   mimeType: string;
-  documentType: "receipt" | "invoice";
+  documentType: ReceiptDocumentType;
+  receiptText?: string;
 }
 
 export interface ReceiptExtractionResponsePayload {
@@ -43,6 +46,7 @@ export interface ReceiptExtractionResponsePayload {
   amount: number;
   category: string;
   description: string;
+  confidence?: string | null;
 }
 
 export interface ReceiptExtractionSuccess {
@@ -62,6 +66,20 @@ export interface ReceiptExtractionFailure {
 export type ReceiptExtractionServiceResult =
   | ReceiptExtractionSuccess
   | ReceiptExtractionFailure;
+
+const parseJsonResponse = async <T>(response: Response): Promise<T | null> => {
+  const text = await response.text();
+
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
+};
 
 export const buildMockFinancialSummary = (): InsightsSummary => ({
   scope: "personal",
@@ -93,17 +111,19 @@ export const postInsightsRequest = async (
       signal: controller.signal,
     });
 
-    const body = (await response.json()) as InsightsResponsePayload;
+    const body = await parseJsonResponse<InsightsResponsePayload | { message?: string }>(
+      response
+    );
 
     return {
       ok: response.ok,
       status: response.status,
       body: response.ok
-        ? body
+        ? (body as InsightsResponsePayload)
         : {
             message:
-              typeof (body as { message?: unknown }).message === "string"
-                ? (body as { message: string }).message
+              body && typeof body === "object" && typeof body.message === "string"
+                ? body.message
                 : "AI microservice returned an error.",
           },
     } as AiServiceResult;
@@ -131,6 +151,21 @@ export const buildMockReceiptExtractionPayload = (
   fileName: requestBody?.fileName || "mock-receipt.txt",
   mimeType: requestBody?.mimeType || "text/plain",
   documentType: requestBody?.documentType || "receipt",
+  receiptText: requestBody?.receiptText,
+});
+
+export const buildUploadedReceiptPayload = (input: {
+  fileBuffer: Buffer;
+  fileName: string;
+  mimeType: string;
+  documentType?: ReceiptDocumentType;
+  receiptText?: string;
+}): ReceiptExtractionMicroservicePayload => ({
+  fileBuffer: input.fileBuffer,
+  fileName: input.fileName,
+  mimeType: input.mimeType,
+  documentType: input.documentType || "receipt",
+  receiptText: input.receiptText,
 });
 
 export const buildDraftTransaction = (
@@ -152,26 +187,77 @@ export const postReceiptExtractionRequest = async (
   const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
 
   try {
+    const body =
+      payload.fileBuffer !== undefined
+        ? (() => {
+            const formData = new FormData();
+            const receiptBlob = new Blob([payload.fileBuffer], {
+              type: payload.mimeType,
+            });
+
+            formData.append("file", receiptBlob, payload.fileName);
+            formData.append("documentType", payload.documentType);
+
+            if (payload.receiptText) {
+              formData.append("receiptText", payload.receiptText);
+            }
+
+            console.info("[aiService] forwarding multipart receipt payload:", {
+              hasFileBuffer: true,
+              fileFieldName: "file",
+              fileName: payload.fileName,
+              mimeType: payload.mimeType,
+              bufferSize: payload.fileBuffer.length,
+              hasReceiptText: Boolean(payload.receiptText),
+            });
+
+            return formData;
+          })()
+        : JSON.stringify({
+            fileName: payload.fileName,
+            mimeType: payload.mimeType,
+            documentType: payload.documentType,
+            receiptText: payload.receiptText,
+          });
+
+    if (payload.fileBuffer === undefined) {
+      console.info("[aiService] forwarding JSON receipt payload fallback:", {
+        fileName: payload.fileName,
+        mimeType: payload.mimeType,
+        documentType: payload.documentType,
+        hasReceiptText: Boolean(payload.receiptText),
+      });
+    }
+
     const response = await fetch(`${baseUrl}/extract-receipt`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
+      headers:
+        payload.fileBuffer !== undefined
+          ? undefined
+          : {
+              "Content-Type": "application/json",
+            },
+      body,
       signal: controller.signal,
     });
 
-    const body = (await response.json()) as ReceiptExtractionResponsePayload;
+    console.info("[aiService] python receipt response status:", response.status);
+
+    const parsedBody = await parseJsonResponse<
+      ReceiptExtractionResponsePayload | { message?: string }
+    >(response);
 
     return {
       ok: response.ok,
       status: response.status,
       body: response.ok
-        ? body
+        ? (parsedBody as ReceiptExtractionResponsePayload)
         : {
             message:
-              typeof (body as { message?: unknown }).message === "string"
-                ? (body as { message: string }).message
+              parsedBody &&
+              typeof parsedBody === "object" &&
+              typeof parsedBody.message === "string"
+                ? parsedBody.message
                 : "AI microservice returned an error.",
           },
     } as ReceiptExtractionServiceResult;

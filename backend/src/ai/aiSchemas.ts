@@ -47,12 +47,14 @@ export const insightsRequestBodySchema = z
   .union([insightsSummarySchema, z.object({}).strict()])
   .optional();
 
+export const receiptDocumentTypeSchema = z.enum(["receipt", "invoice"]);
+
 export const receiptExtractionRequestSchema = z
   .object({
     receiptText: z.string().trim().min(1).optional(),
     fileName: z.string().trim().min(1).optional(),
     mimeType: z.string().trim().min(1).optional(),
-    documentType: z.enum(["receipt", "invoice"]).optional(),
+    documentType: receiptDocumentTypeSchema.optional(),
   })
   .refine(
     (value) =>
@@ -70,12 +72,21 @@ export const receiptExtractionRequestSchema = z
   )
   .optional();
 
+export const receiptExtractionMultipartFieldsSchema = z.object({
+  documentType: receiptDocumentTypeSchema.optional().default("receipt"),
+  receiptText: z.string().trim().min(1).optional(),
+});
+
 export type PersonalInsightsSummary = z.infer<
   typeof personalInsightsSummarySchema
 >;
 export type GroupInsightsSummary = z.infer<typeof groupInsightsSummarySchema>;
 export type InsightsSummary = z.infer<typeof insightsSummarySchema>;
 export type InsightsRequestBody = z.infer<typeof insightsRequestBodySchema>;
+export type ReceiptDocumentType = z.infer<typeof receiptDocumentTypeSchema>;
 export type ReceiptExtractionRequestBody = z.infer<
   typeof receiptExtractionRequestSchema
+>;
+export type ReceiptExtractionMultipartFields = z.infer<
+  typeof receiptExtractionMultipartFieldsSchema
 >;

@@ -1,11 +1,9 @@
 # Python Microservice
 
-This folder contains the FastAPI microservice for:
+This FastAPI service handles:
 
-- AI-powered financial insights with Groq and fallback mode
-- mock receipt and invoice extraction
-
-The service now tries Groq first for `/generate-insights` and falls back to local rule-based insights if `GROQ_API_KEY` is missing, the Groq SDK is unavailable, the API response is invalid, or the Groq request fails. Receipt extraction is still mock-only.
+- AI-powered financial insights through Groq with fallback mode
+- receipt image upload and Groq Vision OCR attempt with safe fallback extraction
 
 ## Endpoints
 
@@ -13,25 +11,14 @@ The service now tries Groq first for `/generate-insights` and falls back to loca
 - `POST /generate-insights`
 - `POST /extract-receipt`
 
-## Project Structure
+## Receipt Upload Flow
 
-```text
-python-microservice/
-  app/
-    __init__.py
-    main.py
-    models.py
-  .env.example
-  README.md
-  requirements.txt
-```
+1. The frontend uploads a receipt image to the backend as `multipart/form-data`.
+2. The backend forwards the image to this FastAPI service.
+3. This service attempts Groq Vision OCR using `GROQ_API_KEY` and `GROQ_VISION_MODEL`.
+4. If Groq Vision is unavailable, rate-limited, misconfigured, or returns invalid JSON, the service returns a safe fallback draft instead of failing.
 
 ## Setup
-
-1. Create and activate a virtual environment.
-2. Install dependencies.
-3. Copy `.env.example` to `.env`.
-4. Start the FastAPI server.
 
 ### Windows PowerShell
 
@@ -44,22 +31,28 @@ Copy-Item .env.example .env
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-## Groq Configuration
-
-To enable Groq-backed insights, add your API key to `.env`:
+## Environment Variables
 
 ```env
+SERVICE_NAME=expense-tracker-ai-microservice
+APP_VERSION=0.1.0
+ENVIRONMENT=development
+HOST=0.0.0.0
+PORT=8000
 GROQ_API_KEY=your_groq_api_key_here
+GROQ_VISION_MODEL=qwen/qwen3.6-27b
 ```
 
-If `GROQ_API_KEY` is missing, `/generate-insights` still works in fallback mode.
+## Fallback Mode
 
-### OpenAPI Docs
+The service still works if:
 
-After the server starts:
+- `GROQ_API_KEY` is missing
+- the selected Groq Vision model is unavailable
+- Groq returns invalid or partial JSON
+- the request is rate-limited
 
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+In those cases, `/extract-receipt` returns a safe fallback draft transaction response so the frontend can keep the review flow working.
 
 ## Sample Requests
 
@@ -71,9 +64,11 @@ GET /health
 
 ### Generate Insights
 
-Personal mode:
-
-```json
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/generate-insights" `
+  -Method POST `
+  -ContentType "application/json" `
+  -Body @'
 {
   "scope": "personal",
   "period": "monthly",
@@ -88,116 +83,39 @@ Personal mode:
     { "name": "Netflix", "amount": 17 }
   ]
 }
+'@
 ```
 
-Group mode:
+### Extract Receipt With Multipart Upload
 
-```json
-{
-  "scope": "group",
-  "period": "monthly",
-  "groupName": "Roommates",
-  "totalGroupExpenses": 1200,
-  "topCategories": [
-    { "category": "Rent", "amount": 900 },
-    { "category": "Groceries", "amount": 180 }
-  ],
-  "memberContributions": [
-    { "memberName": "Rohan", "paid": 930, "share": 400, "balance": 530 },
-    { "memberName": "Alex", "paid": 180, "share": 400, "balance": -220 }
-  ]
+```powershell
+$form = @{
+  file = Get-Item ".\sample-receipt.jpg"
+  documentType = "receipt"
 }
+
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/extract-receipt" `
+  -Method POST `
+  -Form $form
 ```
 
-Response shape:
+### JSON Fallback Request
 
-```json
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/extract-receipt" `
+  -Method POST `
+  -ContentType "application/json" `
+  -Body @'
 {
-  "summary": "...",
-  "riskLevel": "low | medium | high",
-  "positiveNotes": ["..."],
-  "warnings": ["..."],
-  "recommendations": ["..."],
-  "nextActions": ["..."]
-}
-```
-
-### Extract Receipt
-
-Current mock request shape:
-
-```json
-{
-  "fileName": "receipt.jpg",
-  "mimeType": "image/jpeg",
+  "fileName": "receipt-demo.txt",
+  "mimeType": "text/plain",
   "documentType": "receipt"
 }
-```
-
-Mock response:
-
-```json
-{
-  "merchant": "Mock Merchant",
-  "date": "2026-06-18",
-  "amount": 25.99,
-  "category": "Food",
-  "description": "Mock receipt extraction result"
-}
-```
-
-## Notes For Later
-
-- replace `/extract-receipt` mock logic with real OCR pipeline
-- add authentication between backend and this microservice if needed
-- switch receipt extraction to file upload when the frontend/backend contract is ready
-
-## Testing `/generate-insights`
-
-### Personal summary test
-
-```powershell
-Invoke-RestMethod -Uri "http://127.0.0.1:8000/generate-insights" `
-  -Method POST `
-  -ContentType "application/json" `
-  -Body @'
-{
-  "scope": "personal",
-  "period": "monthly",
-  "totalIncome": 1800,
-  "totalExpenses": 1350,
-  "netBalance": 450,
-  "topCategories": [
-    { "category": "Food", "amount": 400 },
-    { "category": "Rent", "amount": 750 }
-  ],
-  "recurringExpenses": [
-    { "name": "Netflix", "amount": 17 }
-  ]
-}
 '@
 ```
 
-### Group summary test
+## Notes
 
-```powershell
-Invoke-RestMethod -Uri "http://127.0.0.1:8000/generate-insights" `
-  -Method POST `
-  -ContentType "application/json" `
-  -Body @'
-{
-  "scope": "group",
-  "period": "monthly",
-  "groupName": "Roommates",
-  "totalGroupExpenses": 1200,
-  "topCategories": [
-    { "category": "Rent", "amount": 900 },
-    { "category": "Groceries", "amount": 180 }
-  ],
-  "memberContributions": [
-    { "memberName": "Rohan", "paid": 930, "share": 400, "balance": 530 },
-    { "memberName": "Alex", "paid": 180, "share": 400, "balance": -220 }
-  ]
-}
-'@
-```
+- `python-multipart` is required for FastAPI multipart parsing.
+- This service does not add heavy local OCR dependencies such as Tesseract or EasyOCR.
+- The backend keeps the existing `/api/ai/extract-receipt` route and maps this service response into the frontend draft transaction format.
