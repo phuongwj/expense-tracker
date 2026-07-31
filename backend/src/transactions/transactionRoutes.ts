@@ -2,6 +2,7 @@ import express from 'express'
 import { createPersonal, getPersonal, updatePersonal, deletePersonal,
         createGroup, getGroup, updateGroup, deleteGroup
  } from "./transactionController.ts"
+
 import { getGroupBalances, getGlobalBalances } from "./balancesController.ts"
 import { createSettlement } from "./settlementsController.ts"
 import { validateBody, validateQuery, validateParams } from "../middleware/validateRequest.ts"
@@ -11,8 +12,8 @@ import {
     updateTransactionSchema,
     deleteTransactionSchema,
     createGroupTransactionSchema,
-    updateGroupTransactionSchema,
-    createSettlementSchema } from "./transactionSchemas.ts"
+    createSettlementSchema,
+    updateGroupTransactionSchema } from "./transactionSchemas.ts"
 import { requireAuth, requireGroupMember } from "../middleware/authMiddleware.ts"
 
 const router = express.Router()

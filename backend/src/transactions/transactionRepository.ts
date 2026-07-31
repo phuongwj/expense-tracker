@@ -47,20 +47,23 @@ export const getPersonalTransactions = async (
 ): Promise<Transaction[]> => {
     let query = `
         SELECT
-            id,
-            user_id AS "userId",
-            group_id AS "groupId",
-            paid_by AS "paidBy",
-            category_id AS "categoryId",
-            type,
-            amount,
-            transaction_date AS "transactionDate",
-            description,
-            is_recurring AS "isRecurring",
-            recurring_interval AS "recurringInterval"
-        FROM transactions
-        WHERE user_id = $1
-        AND group_id IS NULL
+            t.id,
+            t.user_id AS "userId",
+            t.group_id AS "groupId",
+            t.paid_by AS "paidBy",
+            t.category_id AS "categoryId",
+            c.name AS "category",
+            t.type,
+            t.amount,
+            t.transaction_date AS "transactionDate",
+            t.description,
+            t.is_recurring AS "isRecurring",
+            t.recurring_interval AS "recurringInterval"
+        FROM transactions t
+        LEFT JOIN categories c
+        ON t.category_id = c.id
+        WHERE t.user_id = $1
+        AND t.group_id IS NULL
     `;
 
     //params array will contain the different type values passed in the query params
@@ -199,13 +202,23 @@ export const createGroupTransaction = async (
 export const insertTransactionSplits = async (
     transactionId: string,
     splits: { userId: string; amount: number }[]
-): Promise<void> => {
+): Promise<TransactionSplit[]> => {
+    const splitsAdded: TransactionSplit[] = [];
+
     for (const split of splits) {
-        await pool.query(
-            `INSERT INTO transaction_splits (transaction_id, user_id, amount) VALUES ($1, $2, $3)`,
+        const result = await pool.query(
+            `INSERT INTO transaction_splits (transaction_id, user_id, amount) VALUES ($1, $2, $3)
+            RETURNING 
+                id,
+                transaction_id AS "transactionId",
+                user_id AS "userId",
+                amount
+            `,
             [transactionId, split.userId, split.amount]
         );
+        splitsAdded.push(result.rows[0]);
     }
+    return splitsAdded;
 }
 
 /**
@@ -224,19 +237,22 @@ export const getGroupTransactions = async (
 ): Promise<Transaction[]> => {
     let query = `
         SELECT
-            id,
-            user_id AS "userId",
-            group_id AS "groupId",
-            paid_by AS "paidBy",
-            category_id AS "categoryId",
-            type,
-            amount,
-            transaction_date AS "transactionDate",
-            description,
-            is_recurring AS "isRecurring",
-            recurring_interval AS "recurringInterval"
-        FROM transactions
-        WHERE group_id = $1
+            t.id,
+            t.user_id AS "userId",
+            t.group_id AS "groupId",
+            t.paid_by AS "paidBy",
+            t.category_id AS "categoryId",
+            c.name AS "category",
+            t.type,
+            t.amount,
+            t.transaction_date AS "transactionDate",
+            t.description,
+            t.is_recurring AS "isRecurring",
+            t.recurring_interval AS "recurringInterval"
+        FROM transactions t
+        LEFT JOIN categories c
+        ON t.category_id = c.id
+        WHERE t.group_id = $1
     `;
 
     //build the query based on which query parameters the user included
