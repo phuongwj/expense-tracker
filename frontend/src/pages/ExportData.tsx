@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { transactions } from '../data/mockData'
-import Spinner, { simulateApiCall } from '../components/Spinner'
+// Spinner removed — no longer used on this page
 
 const viewOptions = ['Personal', 'Dal Apartment 2B', 'CSCI 4177 Study Group', 'Weekend Trip'] as const
 const typeOptions = ['All', 'Expenses', 'Income'] as const
