@@ -1,70 +1,165 @@
+import { useEffect, useState } from 'react'
 import Layout from '../components/Layout'
+import api from '../services/api'
 
-const insights = [
-  {
-    icon: '📈',
-    title: 'Food spending is elevated',
-    tag: '⚠ Attention',
-    tagClass: 'bg-amber-50 text-amber-700',
-    borderClass: 'border-l-4 border-l-amber-400',
-    body: "You've spent $213 on food this month — 38% of total expenses. The student average is around 25%.",
-    link: 'View food transactions →',
+interface InsightsPayload {
+  summary: string
+  riskLevel: 'low' | 'medium' | 'high'
+  positiveNotes: string[]
+  warnings: string[]
+  recommendations: string[]
+  nextActions: string[]
+}
+
+interface InsightsResponse {
+  summarySent: Record<string, unknown>
+  insights: InsightsPayload
+}
+
+const riskStyles: Record<InsightsPayload['riskLevel'], { label: string; className: string }> = {
+  low: {
+    label: 'Low risk',
+    className: 'bg-green-50 text-green-700',
   },
+  medium: {
+    label: 'Medium risk',
+    className: 'bg-amber-50 text-amber-700',
+  },
+  high: {
+    label: 'High risk',
+    className: 'bg-red-50 text-red-700',
+  },
+}
+
+const sectionConfig = [
   {
-    icon: '💰',
-    title: 'Savings are on track',
-    tag: '✓ On track',
-    tagClass: 'bg-green-50 text-green-700',
+    key: 'positiveNotes',
+    title: 'Positive Notes',
+    icon: '↑',
     borderClass: 'border-l-4 border-l-green-500',
-    body: "You've saved $1,842 this month — 76.8% of income.",
-    link: 'Set a savings goal →',
   },
   {
-    icon: '📺',
-    title: 'Review your subscriptions',
-    tag: '💡 Tip',
-    tagClass: 'bg-gray-100 text-gray-600',
-    borderClass: 'border-l-4 border-l-gray-300',
-    body: 'You have $47.97/month in recurring subscriptions. Cancelling unused ones could save $576/year.',
-    link: 'Review recurring expenses →',
+    key: 'warnings',
+    title: 'Warnings',
+    icon: '!',
+    borderClass: 'border-l-4 border-l-amber-400',
   },
-]
+  {
+    key: 'recommendations',
+    title: 'Recommendations',
+    icon: '+',
+    borderClass: 'border-l-4 border-l-[#3D6B4F]',
+  },
+  {
+    key: 'nextActions',
+    title: 'Next Actions',
+    icon: '→',
+    borderClass: 'border-l-4 border-l-gray-300',
+  },
+] as const
 
 export default function AIInsights() {
+  const [insights, setInsights] = useState<InsightsPayload | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  const fetchInsights = async () => {
+    setIsLoading(true)
+    setError('')
+
+    try {
+      const response = await api.post<InsightsResponse>('/ai/insights', {})
+      setInsights(response.data.insights)
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { error?: string; message?: string } } }
+      setError(apiError.response?.data?.message ?? apiError.response?.data?.error ?? 'Unable to load AI insights right now.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void fetchInsights()
+  }, [])
+
+  const riskStyle = insights ? riskStyles[insights.riskLevel] : riskStyles.medium
+
   return (
     <Layout
       title="AI Insights"
       headerActions={
-        <button className="h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700">
-          ↻ Refresh insights
+        <button
+          onClick={() => void fetchInsights()}
+          disabled={isLoading}
+          className="h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 disabled:opacity-60"
+        >
+          {isLoading ? 'Refreshing...' : 'Refresh insights'}
         </button>
       }
     >
       <div className="bg-[#2D5240] rounded-2xl p-6 mb-6 text-white">
-        <div className="text-xs uppercase tracking-wide text-white/60 mb-2">✦ AI Summary · May 2026</div>
-        <div className="text-2xl font-bold mb-1">You spent 23% less than last month</div>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+          <div className="text-xs uppercase tracking-wide text-white/60">AI Summary · Current Demo</div>
+          {insights && (
+            <span className={`text-xs font-semibold rounded px-2 py-1 ${riskStyle.className}`}>
+              {riskStyle.label}
+            </span>
+          )}
+        </div>
+        <div className="text-2xl font-bold mb-1">
+          {isLoading ? 'Generating your financial insight summary...' : insights?.summary ?? 'AI insights are ready when requested.'}
+        </div>
         <div className="text-white/70 text-sm">
-          Your food budget improved — and your savings rate (76.8%) is well above the student average.
+          {isLoading
+            ? 'We are preparing a student-friendly summary from the backend fallback insights.'
+            : insights
+            ? 'These notes come from the protected AI insights endpoint using the current fallback summary.'
+            : 'Refresh insights to request a new summary from the backend.'}
         </div>
       </div>
 
-      <div className="flex flex-col gap-4">
-        {insights.map((i) => (
-          <div key={i.title} className={`bg-white rounded-2xl border border-gray-100 p-5 ${i.borderClass}`}>
-            <div className="flex justify-between items-start mb-2">
-              <div className="flex items-center gap-2 font-semibold text-gray-900">
-                <span>{i.icon}</span>
-                {i.title}
+      {error && (
+        <div className="mb-6 p-4 rounded-2xl border border-red-200 bg-red-50 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-sm text-gray-500">
+          Loading AI insights...
+        </div>
+      ) : insights ? (
+        <div className="flex flex-col gap-4">
+          {sectionConfig.map((section) => {
+            const items = insights[section.key]
+
+            return (
+              <div key={section.key} className={`bg-white rounded-2xl border border-gray-100 p-5 ${section.borderClass}`}>
+                <div className="flex items-center gap-2 font-semibold text-gray-900 mb-3">
+                  <span>{section.icon}</span>
+                  {section.title}
+                </div>
+
+                {items.length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    {items.map((item) => (
+                      <div key={item} className="text-sm text-gray-600">
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400">No items available in this section.</p>
+                )}
               </div>
-              <span className={`text-xs font-semibold rounded px-2 py-0.5 ${i.tagClass}`}>{i.tag}</span>
-            </div>
-            <p className="text-sm text-gray-600 mb-3">{i.body}</p>
-            <a href="#" className="text-sm text-[#3D6B4F] font-medium hover:underline">
-              {i.link}
-            </a>
-          </div>
-        ))}
-      </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-sm text-gray-500">
+          No AI insights available yet.
+        </div>
+      )}
     </Layout>
   )
 }

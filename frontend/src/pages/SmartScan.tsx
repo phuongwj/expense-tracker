@@ -1,13 +1,45 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { categories } from '../data/mockData'
+import api from '../services/api'
 
 const steps = [
   { n: 1, title: 'Upload', sub: 'Photo or PDF of your receipt' },
   { n: 2, title: 'Text is extracted', sub: 'Amount, date, merchant auto-filled' },
   { n: 3, title: 'Review & save', sub: 'Correct anything and confirm' },
 ]
+
+interface ReceiptDraft {
+  merchant: string
+  date: string
+  amount: string
+  category: string
+  description: string
+  kind: 'Expense' | 'Income'
+  receiptText: string
+}
+
+interface ExtractReceiptResponse {
+  merchant: string
+  date: string
+  totalAmount: number
+  categorySuggestion: string
+  description: string
+  draftTransaction?: {
+    date?: string
+    description?: string
+    amount?: number
+    type?: 'expense' | 'income'
+    category?: string
+    merchant?: string
+  }
+  confidence: string | null
+  note: string
+}
+
+const demoReceiptText = 'Walmart receipt total 25.99 on 2026-06-18 for groceries'
 
 function StepBar({ current }: { current: number }) {
   return (
@@ -31,10 +63,77 @@ function StepBar({ current }: { current: number }) {
   )
 }
 
+const createEmptyDraft = (): ReceiptDraft => ({
+  merchant: '',
+  date: '',
+  amount: '',
+  category: 'Grocery',
+  description: '',
+  kind: 'Expense',
+  receiptText: demoReceiptText,
+})
+
 export default function SmartScan() {
   const [uploaded, setUploaded] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [note, setNote] = useState('')
+  const [confidence, setConfidence] = useState<string | null>(null)
+  const [draft, setDraft] = useState<ReceiptDraft>(createEmptyDraft())
 
-  if (uploaded) return <ReceiptReview onBack={() => setUploaded(false)} />
+  const requestReceiptExtraction = async () => {
+    setIsLoading(true)
+    setError('')
+
+    try {
+      const response = await api.post<ExtractReceiptResponse>('/ai/extract-receipt', {
+        fileName: 'receipt-demo.txt',
+        mimeType: 'text/plain',
+        documentType: 'receipt',
+        receiptText: demoReceiptText,
+      })
+
+      const payload = response.data
+
+      setDraft({
+        merchant: payload.draftTransaction?.merchant ?? payload.merchant,
+        date: payload.draftTransaction?.date ?? payload.date,
+        amount: String(payload.draftTransaction?.amount ?? payload.totalAmount),
+        category: payload.draftTransaction?.category ?? payload.categorySuggestion,
+        description: payload.draftTransaction?.description ?? payload.description,
+        kind: payload.draftTransaction?.type === 'income' ? 'Income' : 'Expense',
+        receiptText: demoReceiptText,
+      })
+      setConfidence(payload.confidence)
+      setNote(payload.note)
+      setUploaded(true)
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { error?: string; message?: string } } }
+      setError(apiError.response?.data?.message ?? apiError.response?.data?.error ?? 'Unable to extract receipt details right now.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const resetFlow = () => {
+    setUploaded(false)
+    setError('')
+    setNote('')
+    setConfidence(null)
+    setDraft(createEmptyDraft())
+  }
+
+  if (uploaded) {
+    return (
+      <ReceiptReview
+        draft={draft}
+        note={note}
+        confidence={confidence}
+        onBack={resetFlow}
+        onDraftChange={setDraft}
+      />
+    )
+  }
 
   return (
     <Layout title="Smart Scan">
@@ -47,41 +146,74 @@ export default function SmartScan() {
 
       <StepBar current={1} />
 
+      {error && (
+        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
         <h2 className="text-xl font-semibold text-gray-900 mb-1">Upload a receipt or invoice</h2>
         <p className="text-sm text-gray-500 mb-6">
           Take a photo of a store receipt, or upload a saved invoice.
           <br />
-          We'll read the text automatically — you just review and save.
+          We&apos;ll read the text automatically — you just review and save.
         </p>
         <div
-          onClick={() => setUploaded(true)}
-          className="border-2 border-dashed border-gray-200 rounded-xl py-14 mb-6 cursor-pointer hover:border-[#3D6B4F] transition"
+          onClick={() => {
+            if (!isLoading) {
+              void requestReceiptExtraction()
+            }
+          }}
+          className={`border-2 border-dashed rounded-xl py-14 mb-6 transition ${
+            isLoading
+              ? 'border-gray-200 bg-gray-50 cursor-wait'
+              : 'border-gray-200 cursor-pointer hover:border-[#3D6B4F]'
+          }`}
         >
-          <div className="text-3xl mb-2">↑</div>
-          <div className="font-semibold text-gray-900">Drag & drop your file here</div>
-          <div className="text-sm text-gray-400">or click to browse</div>
+          <div className="text-3xl mb-2">{isLoading ? '…' : '↑'}</div>
+          <div className="font-semibold text-gray-900">
+            {isLoading ? 'Extracting receipt details...' : 'Use demo receipt extraction'}
+          </div>
+          <div className="text-sm text-gray-400">
+            {isLoading ? 'Calling the protected OCR endpoint now' : 'Phase 1 uses demo metadata and receipt text'}
+          </div>
         </div>
         <button
-          onClick={() => setUploaded(true)}
-          className="h-11 px-6 rounded-xl bg-[#3D6B4F] text-white text-sm font-semibold hover:bg-[#2D5240] mb-4"
+          onClick={() => void requestReceiptExtraction()}
+          disabled={isLoading}
+          className="h-11 px-6 rounded-xl bg-[#3D6B4F] text-white text-sm font-semibold hover:bg-[#2D5240] mb-4 disabled:opacity-60"
         >
-          Choose file to upload
+          {isLoading ? 'Extracting...' : 'Run demo extraction'}
         </button>
         <div className="text-sm text-gray-400 mb-4">or</div>
         <button className="h-11 px-6 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 mb-4">
           + Add transaction manually
         </button>
-        <div className="text-xs text-gray-400">Supports JPG, PNG, HEIC, PDF · Max 10 MB</div>
+        <div className="text-xs text-gray-400">Phase 1 sends demo metadata and receipt text to the backend OCR endpoint</div>
       </div>
     </Layout>
   )
 }
 
-function ReceiptReview({ onBack }: { onBack: () => void }) {
+function ReceiptReview({
+  draft,
+  note,
+  confidence,
+  onBack,
+  onDraftChange,
+}: {
+  draft: ReceiptDraft
+  note: string
+  confidence: string | null
+  onBack: () => void
+  onDraftChange: React.Dispatch<React.SetStateAction<ReceiptDraft>>
+}) {
   const navigate = useNavigate()
-  const [kind, setKind] = useState<'Expense' | 'Income'>('Expense')
-  const [category, setCategory] = useState('Grocery')
+
+  const updateField = (field: keyof ReceiptDraft, value: string) => {
+    onDraftChange((prev) => ({ ...prev, [field]: value }))
+  }
 
   return (
     <Layout title="Receipt Information">
@@ -92,32 +224,20 @@ function ReceiptReview({ onBack }: { onBack: () => void }) {
         / <span className="text-gray-700 font-medium">Receipt Information</span>
       </div>
 
+      <StepBar current={3} />
+
       <div className="bg-green-50 border border-green-200 text-green-900 rounded-xl px-4 py-3 text-sm mb-6">
-        <span className="font-semibold">✓ Extracted — please review before saving.</span> 5 of 6 fields detected with
-        high confidence. Check the highlighted field and correct anything that looks wrong.
+        <span className="font-semibold">✓ Extracted — please review before saving.</span>{' '}
+        {note || 'Mock OCR details were returned by the protected backend endpoint.'}
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-6">
         <div className="flex justify-between items-center mb-3">
           <h2 className="font-semibold text-gray-900">Uploaded receipt</h2>
-          <span className="text-xs font-semibold text-green-700">✓ Scan complete</span>
+          <span className="text-xs font-semibold text-green-700">{confidence ? confidence : 'Mock extraction result'}</span>
         </div>
-        <div className="bg-gray-50 rounded-xl p-4 font-mono text-xs text-gray-600 leading-relaxed">
-          <div className="text-center font-bold">SUPERSTORE</div>
-          <div className="text-center mb-2">5880 Spring Garden Rd, Halifax, NS B3H 1Y1</div>
-          <div className="border-t border-dashed border-gray-300 my-2" />
-          <div className="flex justify-between"><span>Bread (WW)</span><span>$3.49</span></div>
-          <div className="flex justify-between"><span>Milk 2% 4L</span><span>$6.99</span></div>
-          <div className="flex justify-between"><span>Chicken breast</span><span>$14.27</span></div>
-          <div className="flex justify-between"><span>Pasta 500g x2</span><span>$4.98</span></div>
-          <div className="flex justify-between"><span>Tomato sauce</span><span>$3.29</span></div>
-          <div className="flex justify-between"><span>Apples 3lb bag</span><span>$5.49</span></div>
-          <div className="flex justify-between"><span>Orange juice</span><span>$4.79</span></div>
-          <div className="border-t border-dashed border-gray-300 my-2" />
-          <div className="flex justify-between"><span>Subtotal</span><span>$43.30</span></div>
-          <div className="flex justify-between"><span>HST (15%)</span><span>$6.50</span></div>
-          <div className="flex justify-between font-bold"><span>TOTAL</span><span>$49.80</span></div>
-          <div className="mt-2">VISA ····4821 &nbsp; $49.80</div>
+        <div className="bg-gray-50 rounded-xl p-4 font-mono text-xs text-gray-600 leading-relaxed whitespace-pre-wrap">
+          {draft.receiptText}
         </div>
       </div>
 
@@ -125,7 +245,7 @@ function ReceiptReview({ onBack }: { onBack: () => void }) {
         <div className="flex items-center gap-4 mb-4">
           <h2 className="font-semibold text-gray-900">Extracted transaction details</h2>
           <span className="flex items-center gap-1 text-xs text-green-700">
-            <span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> High confidence
+            <span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Backend connected
           </span>
           <span className="flex items-center gap-1 text-xs text-amber-700">
             <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" /> Review suggested
@@ -134,33 +254,42 @@ function ReceiptReview({ onBack }: { onBack: () => void }) {
 
         <div className="grid grid-cols-2 gap-2 mb-5 max-w-sm">
           <button
-            onClick={() => setKind('Expense')}
+            onClick={() => updateField('kind', 'Expense')}
             className={`h-10 rounded-xl text-sm font-semibold border ${
-              kind === 'Expense' ? 'bg-red-50 border-red-300 text-red-700' : 'border-gray-200 text-gray-500'
+              draft.kind === 'Expense' ? 'bg-red-50 border-red-300 text-red-700' : 'border-gray-200 text-gray-500'
             }`}
           >
-            ▾ Expense
+            Expense
           </button>
           <button
-            onClick={() => setKind('Income')}
+            onClick={() => updateField('kind', 'Income')}
             className={`h-10 rounded-xl text-sm font-semibold border ${
-              kind === 'Income' ? 'bg-green-50 border-green-300 text-green-700' : 'border-gray-200 text-gray-500'
+              draft.kind === 'Income' ? 'bg-green-50 border-green-300 text-green-700' : 'border-gray-200 text-gray-500'
             }`}
           >
-            ▴ Income
+            Income
           </button>
         </div>
 
         <div className="grid sm:grid-cols-2 gap-4 mb-4">
-          <Field label="Amount"><input defaultValue="$49.80" className="input" /></Field>
-          <Field label="Date"><input defaultValue="May 5, 2026" className="input" /></Field>
+          <Field label="Amount">
+            <input value={draft.amount} onChange={(e) => updateField('amount', e.target.value)} className="input" />
+          </Field>
+          <Field label="Date">
+            <input value={draft.date} onChange={(e) => updateField('date', e.target.value)} className="input" />
+          </Field>
         </div>
-        <Field label="Merchant"><input defaultValue="Superstore" className="input" /></Field>
+        <Field label="Merchant">
+          <input value={draft.merchant} onChange={(e) => updateField('merchant', e.target.value)} className="input" />
+        </Field>
         <div className="mb-4">
           <label className="label">Description</label>
-          <input defaultValue="Superstore groceries — Halifax Spring Garden" className="input border-amber-300 bg-amber-50" />
+          <input
+            value={draft.description}
+            onChange={(e) => updateField('description', e.target.value)}
+            className="input border-amber-300 bg-amber-50"
+          />
         </div>
-        <Field label="Tax amount (HST)"><input defaultValue="$6.50" className="input" /></Field>
 
         <div className="mb-5">
           <label className="label">Category</label>
@@ -168,9 +297,9 @@ function ReceiptReview({ onBack }: { onBack: () => void }) {
             {categories.map((c) => (
               <button
                 key={c.name}
-                onClick={() => setCategory(c.name)}
+                onClick={() => updateField('category', c.name)}
                 className={`px-3 py-2 rounded-xl border text-sm flex flex-col items-center gap-1 min-w-[64px] ${
-                  category === c.name ? 'border-[#3D6B4F] bg-[#EDF4EE] text-[#2D5240]' : 'border-gray-200 text-gray-600'
+                  draft.category === c.name ? 'border-[#3D6B4F] bg-[#EDF4EE] text-[#2D5240]' : 'border-gray-200 text-gray-600'
                 }`}
               >
                 <span>{c.icon}</span>
@@ -212,7 +341,7 @@ function ReceiptReview({ onBack }: { onBack: () => void }) {
   )
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="mb-4">
       <label className="label">{label}</label>

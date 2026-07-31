@@ -34,15 +34,15 @@ export default function SignUp() {
     setApiError('')
     setIsSubmitting(true)
     try {
-      const res = await api.post('/auth/register', {
+      const res = await api.post('/auth/signup', {
         firstName: data.firstName, lastName: data.lastName,
-        email: data.email, university: data.university, password: data.password,
+        email: data.email, password: data.password,
       })
-      login(res.data.token, res.data.user)
+      login(res.data.accessToken, res.data.user)
       navigate('/dashboard')
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { message?: string } } }
-      setApiError(e.response?.data?.message ?? 'Something went wrong. Please try again.')
+      const e = err as { response?: { data?: { message?: string; error?: string } } }
+      setApiError(e.response?.data?.error ?? e.response?.data?.message ?? 'Something went wrong. Please try again.')
     } finally {
       setIsSubmitting(false)
     }

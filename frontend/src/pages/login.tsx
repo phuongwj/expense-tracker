@@ -29,11 +29,11 @@ export default function Login() {
     setIsSubmitting(true)
     try {
       const res = await api.post('/auth/login', { email: data.email, password: data.password })
-      login(res.data.token, res.data.user)
+      login(res.data.accessToken, res.data.user)
       navigate(from, { replace: true })
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { message?: string } } }
-      setApiError(e.response?.data?.message ?? 'Incorrect email or password. Please try again.')
+      const e = err as { response?: { data?: { message?: string; error?: string } } }
+      setApiError(e.response?.data?.error ?? e.response?.data?.message ?? 'Incorrect email or password. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
