@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import AddTransactionModal from '../components/AddTransactionModal'
+import EditTransactionModal from '../components/EditTransactionModal'
 import ConfirmDialog from '../components/ConfirmDialog'
-import { transactions as initialTransactions } from '../data/mockData'
+import { getPersonalTransactions, deletePersonalTransaction, type Transaction} from '../services/transactions'
 
 const tabs = ['All', 'Expenses', 'Income', 'Recurring'] as const
 
@@ -11,17 +12,42 @@ export default function Transactions() {
   const navigate = useNavigate()
   const [addOpen, setAddOpen] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [editTransaction, setEditTransaction] = useState<Transaction | null>(null)
   const [tab, setTab] = useState<(typeof tabs)[number]>('All')
   const [query, setQuery] = useState('')
-  const [items, setItems] = useState(initialTransactions)
+  const [items, setItems] = useState<Transaction[]>([])
+  
+
+  async function loadTransactions() {
+    try {
+      const data = await getPersonalTransactions()
+      setItems(data)
+    } catch (err) {
+      console.error("Failed to load transactions:", err)
+    }
+  }
+
+  useEffect(() => {
+    loadTransactions()
+  }, [])
 
   const filtered = items.filter((t) => {
-    if (query && !t.description.toLowerCase().includes(query.toLowerCase())) return false
-    if (tab === 'Expenses') return t.amount < 0
-    if (tab === 'Income') return t.amount > 0
-    if (tab === 'Recurring') return t.recurring
+    if (query && t.description && !t.description.toLowerCase().includes(query.toLowerCase())) return false
+    if (tab === 'Expenses') return t.type === 'expense'
+    if (tab === 'Income') return t.type === 'income'
+    if (tab === 'Recurring') return t.isRecurring
     return true
   })
+
+  const income = items
+  .filter((t) => t.type === 'income')
+  .reduce((sum, t) => sum + Number(t.amount), 0)
+
+  const expenses = items
+    .filter((t) => t.type === 'expense')
+    .reduce((sum, t) => sum + Number(t.amount), 0)
+
+  const balance = income - expenses
 
   return (
     <Layout
@@ -41,7 +67,10 @@ export default function Transactions() {
             ↓ Export CSV
           </button>
           <button
-            onClick={() => setAddOpen(true)}
+            onClick={() => {
+              setEditTransaction(null)
+              setAddOpen(true)
+            }}
             className="h-9 px-4 rounded-lg bg-[#3D6B4F] text-white text-sm font-semibold hover:bg-[#2D5240]"
           >
             + Add Transaction
@@ -50,9 +79,22 @@ export default function Transactions() {
       }
     >
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <Card label="Balance" value="$1,842.50" />
-        <Card label="Income (May)" value="+$2,400.00" valueClass="text-green-700" />
-        <Card label="Expenses (May)" value="−$557.50" valueClass="text-red-700" />
+        <Card
+          label="Balance"
+          value={`$${balance.toFixed(2)}`}
+            />
+
+        <Card
+          label="Income"
+          value={`+$${income.toFixed(2)}`}
+          valueClass="text-green-700"
+        />
+
+        <Card
+          label="Expenses"
+          value={`−$${expenses.toFixed(2)}`}
+          valueClass="text-red-700"
+        />
       </div>
 
       <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -65,7 +107,6 @@ export default function Transactions() {
           />
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
         </div>
-        <button className="h-10 px-4 rounded-lg bg-[#3D6B4F] text-white text-sm font-semibold">Search</button>
         {tabs.map((t) => (
           <button
             key={t}
@@ -98,23 +139,39 @@ export default function Transactions() {
             {filtered.map((t) => (
               <tr key={t.id}>
                 <td className="px-6 py-3 font-medium text-gray-900">
-                  <span className="mr-2">{t.icon}</span>
                   {t.description}
-                  {t.recurring && (
+                  {t.isRecurring && (
                     <span className="ml-2 text-[10px] font-semibold bg-green-50 text-green-700 rounded px-1.5 py-0.5">
                       ↻ Recurring
                     </span>
                   )}
                 </td>
-                <td className="px-6 py-3 text-gray-600">{t.category}</td>
-                <td className="px-6 py-3 text-gray-600">{t.date}</td>
-                <td className={`px-6 py-3 font-semibold ${t.amount < 0 ? 'text-red-700' : 'text-green-700'}`}>
-                  {t.amount < 0 ? '−' : '+'}${Math.abs(t.amount).toFixed(2)}
+                <td className="px-6 py-3 text-gray-600">{t.category || ""}</td>
+                <td className="px-6 py-3 text-gray-600">{new Date(t.transactionDate).toLocaleDateString()}</td>
+                <td
+                  className={`px-6 py-3 font-semibold ${
+                    t.type === 'expense' ? 'text-red-700' : 'text-green-700'
+                  }`}
+                >
+                  {t.type === 'expense' ? '−' : '+'}${Number(t.amount).toFixed(2)}
                 </td>
                 <td className="px-6 py-3 text-gray-600">{t.type}</td>
                 <td className="px-6 py-3 text-gray-400">
-                  <button className="mr-3 hover:text-gray-700">✎</button>
-                  <button onClick={() => setDeleteId(t.id)} className="hover:text-red-600">
+                  <button
+                    id='editTransactionButton'
+                    onClick={() => {
+                      setAddOpen(false)
+                      setEditTransaction(t)
+                    }}
+                    className="mr-3 hover:text-gray-700"
+                  > 
+                    ✎
+                  </button>
+                  <button 
+                    id='deleteTransactionButton' 
+                    onClick={() => setDeleteId(t.id)} 
+                    className="hover:text-red-600"
+                  >
                     🗑
                   </button>
                 </td>
@@ -131,13 +188,34 @@ export default function Transactions() {
         </table>
       </div>
 
-      <AddTransactionModal open={addOpen} onClose={() => setAddOpen(false)} />
-      <ConfirmDialog
+       <AddTransactionModal
+          open={addOpen && !editTransaction}
+          onClose={() => setAddOpen(false)}
+          onCreated={loadTransactions}
+        />
+
+        <EditTransactionModal
+          transaction={editTransaction}
+          open={!!editTransaction && !addOpen}
+          onClose={() => setEditTransaction(null)}
+          onUpdated={loadTransactions}
+        />
+
+        <ConfirmDialog
         open={!!deleteId}
         onCancel={() => setDeleteId(null)}
-        onConfirm={() => {
-          setItems((prev) => prev.filter((t) => t.id !== deleteId))
-          setDeleteId(null)
+        onConfirm={async () => {
+          if (!deleteId) return
+
+          try {
+            await deletePersonalTransaction(deleteId)
+
+            setItems((prev) => prev.filter((t) => t.id !== deleteId))
+          } catch (err) {
+            console.error("Failed to delete transaction:", err)
+          } finally {
+            setDeleteId(null)
+          }
         }}
       />
     </Layout>

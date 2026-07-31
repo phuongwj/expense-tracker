@@ -1,14 +1,56 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import AddTransactionModal from '../components/AddTransactionModal'
-import { transactions, groups } from '../data/mockData'
+import { groups } from '../data/mockData'
+import { getPersonalTransactions, type Transaction } from "../services/transactions";
 
 export default function Dashboard() {
   const [addOpen, setAddOpen] = useState(false)
   const [view, setView] = useState('personal')
-  const recent = transactions.slice(0, 5)
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
 
+  async function loadTransactions() {
+    const data = await getPersonalTransactions();
+    setTransactions(data);
+  }
+
+  useEffect(() => {
+    loadTransactions();
+  }, []);
+
+  function formatDate(date: string) {
+    return new Date(date).toLocaleDateString();
+  }
+
+  //functions that use the fetched transactions to calculate current balance, expenses & income
+  function calculateBalance() {
+    return transactions.reduce((balance, transaction) => {
+      if (transaction.type === "income") {
+        return balance + Number(transaction.amount);
+      }
+
+      return balance - Number(transaction.amount);
+    }, 0);
+  }
+
+  function calculateIncome() {
+    return transactions
+      .filter((transaction) => transaction.type === "income")
+      .reduce((total, transaction) => total + Number(transaction.amount), 0);
+  }
+
+  function calculateExpenses() {
+    return transactions
+      .filter((transaction) => transaction.type === "expense")
+      .reduce((total, transaction) => total + Number(transaction.amount), 0);
+  }
+
+  const currentBalance = calculateBalance();
+  const income = calculateIncome();
+  const expenses = calculateExpenses();
+
+  const mostRecent = transactions.slice(0, 5);
   return (
     <Layout
       title="Dashboard"
@@ -36,12 +78,28 @@ export default function Dashboard() {
         </>
       }
     >
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <Card label="Current balance" value="$1,842.50" sub="↑ Updated just now" />
-        <Card label="Income (May)" value="+$2,400.00" valueClass="text-green-700" sub="2 sources this month" />
-        <Card label="Expenses (May)" value="−$557.50" valueClass="text-red-700" sub="Across 8 transactions" />
-      </div>
+   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+  
+      <Card
+        label="Current balance"
+        value={`$${currentBalance.toFixed(2)}`}
+        sub="Updated from transactions"
+      />
 
+      <Card
+        label="Income"
+        value={`+$${income.toFixed(2)}`}
+        valueClass="text-green-700"
+        sub={`${transactions.filter(t => t.type === "income").length} transactions`}
+      />
+
+      <Card
+        label="Expenses"
+        value={`−$${expenses.toFixed(2)}`}
+        valueClass="text-red-700"
+        sub={`${transactions.filter(t => t.type === "expense").length} transactions`}
+      />
+</div>
       <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="font-semibold text-gray-900">Recent Transactions</h2>
@@ -50,19 +108,20 @@ export default function Dashboard() {
           </Link>
         </div>
         <div className="divide-y divide-gray-100">
-          {recent.map((t) => (
+          {mostRecent.map((t) => (
             <div key={t.id} className="flex items-center justify-between py-3">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-gray-50 flex items-center justify-center text-lg">{t.icon}</div>
+
                 <div>
                   <div className="text-sm font-medium text-gray-900">{t.description}</div>
                   <div className="text-xs text-gray-400">
-                    {t.category} · {t.date}
+                    {t.category ?? ""} · {formatDate(t.transactionDate)}
                   </div>
                 </div>
               </div>
-              <div className={`text-sm font-semibold ${t.amount < 0 ? 'text-red-700' : 'text-green-700'}`}>
-                {t.amount < 0 ? '−' : '+'}${Math.abs(t.amount).toFixed(2)}
+              <div className={`text-sm font-semibold ${ 
+                  t.type === 'expense' ? 'text-red-700' : 'text-green-700'}`}>
+                {t.type === 'expense' ? '−' : '+'}${Number(t.amount).toFixed(2)}  
               </div>
             </div>
           ))}
@@ -99,7 +158,11 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <AddTransactionModal open={addOpen} onClose={() => setAddOpen(false)} />
+      <AddTransactionModal
+          open={addOpen}
+          onClose={() => setAddOpen(false)}
+          onCreated={loadTransactions}
+        />
     </Layout>
   )
 }

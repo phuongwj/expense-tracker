@@ -1,25 +1,220 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
+import { getPersonalTransactions, type Transaction } from '../services/transactions'
 
-const weekly = [
-  { week: 'Week 1', income: 90, expense: 60 },
-  { week: 'Week 2', income: 55, expense: 65 },
-  { week: 'Week 3', income: 70, expense: 78 },
-  { week: 'Week 4', income: 60, expense: 20 },
-]
-
-const byCategory = [
-  { name: 'Housing', pct: 38 },
-  { name: 'Food', pct: 15 },
-  { name: 'Education', pct: 10 },
-  { name: 'Entertain', pct: 11 },
-  { name: 'Other', pct: 26 },
-]
 
 const ranges = ['Week', 'Month', 'Semester'] as const
 
+function calculateTotalIncome(transactions: Transaction[]) {
+  return transactions
+    .filter(t => t.type === "income")
+    .reduce((sum, t) => sum + Number(t.amount), 0)
+}
+
+
+function calculateTotalExpenses(transactions: Transaction[]) {
+  return transactions
+    .filter(t => t.type === "expense")
+    .reduce((sum, t) => sum + Number(t.amount), 0)
+}
+
+//group transaction amounts by category
+function getCategoryBreakdown(
+  transactions: Transaction[],
+  totalExpenses: number
+) {
+  const categories: {
+    name: string
+    amount: number
+    pct: number
+  }[] = []
+
+  transactions
+    .filter(t => t.type === "expense")
+    .forEach(t => {
+      const categoryName = t.category ?? "Other"
+
+      const existing = categories.find(
+        c => c.name === categoryName
+      )
+
+      if (existing) {
+        existing.amount += Number(t.amount)
+      } else {
+        categories.push({
+          name: categoryName,
+          amount: Number(t.amount),
+          pct: 0
+        })
+      }
+    })
+  
+  //calculate the percentage of each category based on the user's total
+  categories.forEach(c => {
+    c.pct = totalExpenses === 0
+      ? 0
+      : Math.round((c.amount / totalExpenses) * 100)
+  })
+
+  return categories
+}
+
+/**
+// Transforms transaction data into chart data.
+// Depending on the range selected by the user (week/month/semester),
+// the transactions are assigned to different time intervals (ex: a day of the week, or a week of the month)
+ */
+function getChartData(
+  transactions: Transaction[],
+  range: "Week" | "Month" | "Semester"
+) {
+  const groups: {
+    label: string
+    income: number
+    expense: number
+    order: number
+  }[] = []
+
+  transactions.forEach(t => {
+    const date = new Date(t.transactionDate)
+
+    let label = ""
+    let order = 0
+
+    if (range === "Week") {
+      label = date.toLocaleString(
+        "default",
+        { weekday: "short" }
+      )
+
+      const days = [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+      ]
+
+      //order on X axis: Monday -> Sunday 
+      order = days.indexOf(label)
+
+    } else if (range === "Month") {
+
+      const week = Math.ceil(date.getDate() / 7)
+
+      label = `Week ${week}`
+      //X axis order: Week 1 -> Week 5
+      order = week
+
+    } else {
+
+      label = date.toLocaleString(
+        "default",
+        { month: "short" }
+      )
+
+      //X axis order: Jan -> Dec
+      order = date.getMonth()
+    }
+
+
+    let existing = groups.find(
+      g => g.label === label
+    )
+
+    if (!existing) {
+      existing = {
+        label,
+        income: 0,
+        expense: 0,
+        order
+      }
+
+      groups.push(existing)
+    }
+
+
+    if (t.type === "income") {
+      existing.income += Number(t.amount)
+    } else {
+      existing.expense += Number(t.amount)
+    }
+  })
+
+  //sort so that earliest transaction appears first
+  return groups.sort(
+    (a,b) => a.order - b.order
+  )
+}
+
 export default function Visualisation() {
   const [range, setRange] = useState<(typeof ranges)[number]>('Month')
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+
+  useEffect(() => {
+    async function loadTransactions() {
+      try {
+        const data = await getPersonalTransactions()
+        setTransactions(data)
+      } catch (err) {
+        console.error("Failed to load transactions:", err)
+      }
+    }
+
+    loadTransactions()
+  }, [])
+
+  //apply the weekly/monthly/semester filter on transaction data
+  const filteredTransactions = transactions.filter((t) => {
+    const date = new Date(t.transactionDate)
+    const now = new Date()
+
+    if (range === 'Week') {
+      const sevenDaysAgo = new Date()
+      sevenDaysAgo.setDate(now.getDate() - 7)
+
+      return date >= sevenDaysAgo
+    }
+
+    if (range === 'Month') {
+      return (
+        date.getMonth() === now.getMonth() &&
+        date.getFullYear() === now.getFullYear()
+      )
+    }
+
+    if (range === 'Semester') {
+      //last 4 months
+      const fourMonthsAgo = new Date()
+      fourMonthsAgo.setMonth(now.getMonth() - 4)
+
+      return date >= fourMonthsAgo
+    }
+
+    return true
+  })
+
+const income = calculateTotalIncome(filteredTransactions)
+
+const expenses = calculateTotalExpenses(filteredTransactions)
+
+const byCategory = getCategoryBreakdown(filteredTransactions, expenses)
+
+//category that has the highest total expenses
+const biggestExpense = [...byCategory].sort((a, b) => b.amount - a.amount)[0]
+
+const chartData = getChartData(
+  filteredTransactions,
+  range
+)
+
+  //use 1 as fallback to avoid division by 0 error 
+  const maxChartAmount = Math.max(
+    ...chartData.flatMap(data => [data.income, data.expense]),
+    1
+  )
 
   return (
     <Layout
@@ -41,16 +236,27 @@ export default function Visualisation() {
       }
     >
       <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-6">
-        <h2 className="font-semibold text-gray-900">Income vs Expenses — May 2026</h2>
-        <p className="text-xs text-gray-400 mb-6">Weekly breakdown · Personal view</p>
+        <h2 className="font-semibold text-gray-900">Income vs Expenses - {range || ""}</h2>
+        <p className="text-xs text-gray-400 mb-6">{range || ""} breakdown · Personal view</p>
         <div className="flex items-end gap-6 h-48">
-          {weekly.map((w) => (
-            <div key={w.week} className="flex flex-col items-center gap-1">
+          {chartData.map((data) => (
+            <div key={data.label} className="flex flex-col items-center gap-1">
               <div className="flex items-end gap-1 h-40">
-                <div className="w-8 bg-[#2D5240] rounded-t" style={{ height: `${w.income}%` }} />
-                <div className="w-8 bg-[#C0554F] rounded-t" style={{ height: `${w.expense}%` }} />
+                <div
+                  className="w-8 bg-[#2D5240] rounded-t"
+                  style={{
+                    height: `${(data.income / maxChartAmount) * 100}%`
+                  }}
+                />
+
+                <div
+                  className="w-8 bg-[#C0554F] rounded-t"
+                  style={{
+                    height: `${(data.expense / maxChartAmount) * 100}%`
+                  }}
+                />
               </div>
-              <div className="text-xs text-gray-400 mt-1">{w.week}</div>
+              <div className="text-xs text-gray-400 mt-1">{data.label}</div>
             </div>
           ))}
         </div>
@@ -58,7 +264,6 @@ export default function Visualisation() {
 
       <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-6">
         <h2 className="font-semibold text-gray-900">Expenses by Category</h2>
-        <p className="text-xs text-gray-400 mb-4">May 2026 · $557.50 total</p>
         <div className="flex flex-col gap-3">
           {byCategory.map((c) => (
             <div key={c.name} className="flex items-center gap-3">
@@ -74,9 +279,29 @@ export default function Visualisation() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Stat label="Avg. daily spend" value="$17.98" sub="Based on 31 days" />
-        <Stat label="Biggest expense" value="Rent $900" sub="38% of total expenses" />
-        <Stat label="Savings rate" value="76.8%" sub="Above student avg (55%)" />
+        <Stat
+          label="Avg. daily spend"
+          value={`$${(expenses / 31).toFixed(2)}`}
+          sub="Based on current month"
+        />
+        <Stat
+          label="Biggest expense"
+          value={
+            byCategory.length > 0
+              ? `${biggestExpense.name} $${biggestExpense.amount.toFixed(2)}`
+              : "-"
+          }
+          sub={
+            byCategory.length > 0
+              ? `${biggestExpense.pct}% of expenses`
+              : ""
+          }
+        />
+        <Stat
+          label="Savings rate"
+          value={`${income === 0 ? 0 : ((income - expenses) / income * 100).toFixed(1)}%`}
+          sub="Income remaining after expenses"
+        />
       </div>
     </Layout>
   )

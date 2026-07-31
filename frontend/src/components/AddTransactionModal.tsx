@@ -1,27 +1,73 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Modal from './Modal'
-import { categories } from '../data/mockData'
+import { createPersonalTransaction } from '../services/transactions'
+import { getCategories, type Category } from "../services/categories"
 import Spinner, { simulateApiCall } from './Spinner'
 
-export default function AddTransactionModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function AddTransactionModal({
+  open,
+  onClose,
+  onCreated
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  
   const [kind, setKind] = useState<'Expense' | 'Income'>('Expense')
   const [amount, setAmount] = useState('')
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [description, setDescription] = useState('')
-  const [category, setCategory] = useState('Grocery')
+  const [categories, setCategories] = useState<Category[]>([])
+  const [categoryId, setCategoryId] = useState<string | null>(null)
   const [recurring, setRecurring] = useState(false)
   const [repeats, setRepeats] = useState('Monthly')
+
+  useEffect(() => {
+    async function loadCategories() {
+      try {
+        const data = await getCategories()
+        setCategories(data)
+      } catch (err) {
+        console.error("Failed to load categories:", err)
+      }
+    }
+
+    loadCategories()
+  }, [])
 
   const handleClose = () => {
     setKind('Expense')
     setAmount('')
     setDate(new Date().toISOString().slice(0, 10))
     setDescription('')
-    setCategory('Grocery')
+    setCategoryId(null)
     setRecurring(false)
     setRepeats('Monthly')
     onClose()
   }
+
+  const handleSave = async () => {
+    try {
+      await createPersonalTransaction({
+        type: kind === 'Expense' ? 'expense' : 'income',
+        amount: Number(amount),
+        categoryId,
+        transactionDate: date,
+        description: description || null,
+        isRecurring: recurring,
+        recurringInterval: recurring
+          ? repeats.toLowerCase() as 'weekly' | 'monthly' | 'yearly'
+          : null,
+      });
+
+      //refresh the dashboard before closing
+      onCreated();
+      handleClose();
+    } catch (err) {
+      console.error("Failed to create transaction:", err);
+    }
+  };
 
   return (
     <Modal open={open} onClose={handleClose} title="Add transaction">
@@ -79,18 +125,23 @@ export default function AddTransactionModal({ open, onClose }: { open: boolean; 
       </Field>
 
       <div className="mb-4">
-        <label className="label" id="tx-category-label">Category *</label>
+        <label className="label" id="tx-category-label">Category</label>
         <div className="flex flex-wrap gap-2" role="group" aria-labelledby="tx-category-label">
+          {categories.length === 0 && (
+            <p className="text-sm text-gray-400">
+              No categories available.
+            </p>
+          )}
+
           {categories.map((c) => (
             <button
               type="button"
-              key={c.name}
-              onClick={() => setCategory(c.name)}
+              key={c.id}
+              onClick={() => setCategoryId(c.id)}
               className={`px-3 py-2 rounded-xl border text-sm flex flex-col items-center gap-1 min-w-[64px] ${
-                category === c.name ? 'border-[#3D6B4F] bg-[#EDF4EE] text-[#2D5240]' : 'border-gray-200 text-gray-600'
+                categoryId === c.id ? 'border-[#3D6B4F] bg-[#EDF4EE] text-[#2D5240]' : 'border-gray-200 text-gray-600'
               }`}
             >
-              <span>{c.icon}</span>
               {c.name}
             </button>
           ))}
@@ -130,7 +181,7 @@ export default function AddTransactionModal({ open, onClose }: { open: boolean; 
         <button onClick={handleClose} className="flex-1 h-11 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">
           Cancel
         </button>
-        <button onClick={handleClose} className="flex-1 h-11 rounded-xl bg-[#3D6B4F] text-white text-sm font-semibold hover:bg-[#2D5240]">
+        <button onClick={handleSave} className="flex-1 h-11 rounded-xl bg-[#3D6B4F] text-white text-sm font-semibold hover:bg-[#2D5240]">
           Save transaction
         </button>
       </div>

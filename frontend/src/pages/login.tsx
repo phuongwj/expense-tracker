@@ -29,7 +29,7 @@ export default function Login() {
     setIsSubmitting(true)
     try {
       const res = await api.post('/auth/login', { email: data.email, password: data.password })
-      login(res.data.token, res.data.user)
+      login(res.data.accessToken, res.data.user)
       navigate(from, { replace: true })
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } }
@@ -46,17 +46,13 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex">
-      <div className="hidden lg:flex w-[420px] shrink-0 bg-[#2D5240] flex-col justify-between p-12">
-        <div className="text-3xl text-white font-bold">Expense Tracker</div>
+      <div className="hidden lg:flex w-[420px] shrink-0 bg-[#2D5240] flex-col justify-center p-12">
+        <div className="text-3xl text-white font-bold mb-20">Expense Tracker</div>
         <div>
           <h1 className="text-4xl font-light text-white leading-tight mb-4">Welcome <strong>back</strong></h1>
           <p className="text-white/60 text-sm leading-relaxed">
             Sign in to view your transactions, check group balances, and see your AI-powered insights.
           </p>
-        </div>
-        <div className="flex gap-10">
-          <div><div className="text-3xl font-semibold text-white">$1,842</div><div className="text-xs text-white/50 mt-1">Your balance</div></div>
-          <div><div className="text-3xl font-semibold text-white">3</div><div className="text-xs text-white/50 mt-1">Active groups</div></div>
         </div>
       </div>
       <div className="flex-1 flex items-center justify-center p-8 bg-[#F2F0EA]">
