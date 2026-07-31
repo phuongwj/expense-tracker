@@ -25,9 +25,6 @@ export default function Settings() {
           </div>
           <div className="font-semibold text-gray-900">{name}</div>
           <div className="text-sm text-gray-400">{user?.email ?? 'alex.chen@dal.ca'}</div>
-          <div className="text-sm text-gray-400 flex items-center gap-1 mt-1">
-            🎓 {user?.university ?? 'Dalhousie University'}
-          </div>
         </div>
         <button
           onClick={logout}
@@ -41,9 +38,6 @@ export default function Settings() {
         <h2 className="font-semibold text-gray-900 mb-4">Account information</h2>
         <Row label="Display name">
           <input defaultValue={name} className="input" />
-        </Row>
-        <Row label="University">
-          <input defaultValue={user?.university ?? 'Dalhousie University'} className="input" />
         </Row>
         <Row label="Change password">
           <button className="text-sm text-gray-400">›</button>
