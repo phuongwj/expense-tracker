@@ -19,7 +19,7 @@ export const getCategories = async (req: Request, res: Response) => {
     const userId  = req.userId!;
 
     try {
-        const categories = await getUserCategories(String(userId));
+        const categories = await getUserCategories(userId);
 
         return res.status(200).json({ categories });
     } catch (err) {
@@ -104,7 +104,7 @@ export const remove = async (
     try {
         const deleted = await deleteCategory(
             id,
-            String(userId)
+            userId
         );
 
         if (!deleted) {
