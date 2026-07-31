@@ -77,15 +77,15 @@ export const remove = asyncHandler( async (
     const { id } = req.params;
 
     const userId  = req.userId!;
-
+    
     const deleted = await deleteCategory(
-        id,
-        String(userId)
-    );
+            id,
+            userId
+        );
 
     if (!deleted) {
         throw new NotFoundError("This category could not be found. It may have already been deleted, or it may not belong to your account.");
     }
 
-    return res.status(204).send();
+    return res.status(204).send()
 });
