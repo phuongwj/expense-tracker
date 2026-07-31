@@ -43,6 +43,8 @@ GROQ_API_KEY=your_groq_api_key_here
 GROQ_VISION_MODEL=qwen/qwen3.6-27b
 ```
 
+Do not commit real API keys or production secrets.
+
 ## Fallback Mode
 
 The service still works if:
@@ -119,3 +121,5 @@ Invoke-RestMethod -Uri "http://127.0.0.1:8000/extract-receipt" `
 - `python-multipart` is required for FastAPI multipart parsing.
 - This service does not add heavy local OCR dependencies such as Tesseract or EasyOCR.
 - The backend keeps the existing `/api/ai/extract-receipt` route and maps this service response into the frontend draft transaction format.
+- Smart Scan can now save the reviewed OCR draft through the backend transaction API, but the current Transactions page still renders mock/local data until that page is connected to `GET /api/transactions`.
+- Smart Scan currently saves `categoryId` as `null` because a category lookup API is not available yet.
