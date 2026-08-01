@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import Modal from './Modal'
 import { createPersonalTransaction } from '../services/transactions'
 import { getCategories, type Category } from "../services/categories"
-
 export default function AddTransactionModal({
   open,
   onClose,
@@ -21,6 +20,7 @@ export default function AddTransactionModal({
   const [categoryId, setCategoryId] = useState<string | null>(null)
   const [recurring, setRecurring] = useState(false)
   const [repeats, setRepeats] = useState('Monthly')
+  const x = 42;
 
   useEffect(() => {
     async function loadCategories() {
