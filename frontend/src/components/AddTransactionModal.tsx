@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import Modal from './Modal'
 import { categories } from '../data/mockData'
-import Spinner, { simulateApiCall } from './Spinner'
 
 export default function AddTransactionModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [kind, setKind] = useState<'Expense' | 'Income'>('Expense')
