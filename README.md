@@ -2,6 +2,40 @@
 
 A full-stack expense tracking app built with React (frontend) and Express + PostgreSQL (backend).
 
+## Getting started
+
+This repo uses npm workspaces, so the frontend and backend are separate packages managed from the monorepo root.
+
+1. Install dependencies from the repo root:
+
+```bash
+npm install
+```
+
+2. Start the backend:
+
+```bash
+cd backend
+npm run dev
+```
+
+3. Start the frontend:
+
+```bash
+cd frontend
+npm run dev
+```
+
+You can also run either workspace from the root without changing directories:
+
+```bash
+npm run -w backend dev
+npm run -w frontend dev
+```
+
+If you only want to run the frontend, you can do it the normal way from inside `frontend/`.
+The same is true for the backend from `backend/`.
+
 ## Folder structure
 
 ```

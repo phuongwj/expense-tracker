@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-
+import { asyncHandler } from "../middleware/asyncHandler.ts";
 import {
     getGroupSplitsForUser,
     getGroupSettlementsForUser,
@@ -47,75 +47,64 @@ export const computeNetBalances = (splitRows: BalanceRow[], settlementRows: Bala
  * GET /transactions/group/:groupId/balances
  * Returns the authenticated user's net balance with each other member of the group.
  */
-export const getGroupBalances = async (req: Request<{ groupId: string }>, res: Response) => {
+export const getGroupBalances = asyncHandler (async (req: Request<{ groupId: string }>, res: Response) => {
     const groupId = req.params.groupId;
-    const userId = req.userId!
+    const userId = req.userId!;
+    const splitRows = await getGroupSplitsForUser(groupId, userId);
+    const settlementRows = await getGroupSettlementsForUser(groupId, userId);
 
-    try {
-        const splitRows = await getGroupSplitsForUser(groupId, userId);
-        const settlementRows = await getGroupSettlementsForUser(groupId, userId);
+    const currentBalances = computeNetBalances(splitRows, settlementRows, userId);
 
-        const currentBalances = computeNetBalances(splitRows, settlementRows, userId);
+    const balances = [];
 
-        const balances = [];
-
-        //adds a 'direction' property to balances indicating whether user owes or is owed
-        for (const [otherUserId, amount] of currentBalances) {
-            if (amount === 0) continue;
-            balances.push({
-                userId: otherUserId,
-                amount: Math.abs(amount),
-                direction: amount > 0 ? 'you_owe' : 'owes_you'
-            });
-        }
-
-        return res.status(200).json({ groupId, balances });
-    } catch (err) {
-        console.error('Get group balances error:', err);
-        return res.status(500).json({ error: 'Something went wrong retrieving balances.' });
+    //adds a 'direction' property to balances indicating whether user owes or is owed
+    for (const [otherUserId, amount] of currentBalances) {
+        if (amount === 0) continue;
+        balances.push({
+            userId: otherUserId,
+            amount: Math.abs(amount),
+            direction: amount > 0 ? 'you_owe' : 'owes_you'
+        });
     }
-};
+
+    return res.status(200).json({ groupId, balances });
+});
 
 /**
  * GET /transactions/balances
  * Returns the authenticated user's net balance with every other user
  * across all their groups, plus a summary total.
  */
-export const getGlobalBalances = async (req: Request, res: Response) => {
+export const getGlobalBalances = asyncHandler (async (req: Request, res: Response) => {
     const userId = req.userId!;
 
-    try {
-        const splitRows = await getAllSplitsForUser(userId);
-        const settlementRows = await getAllSettlementsForUser(userId);
+    const splitRows = await getAllSplitsForUser(userId);
+    const settlementRows = await getAllSettlementsForUser(userId);
 
-        const net = computeNetBalances(splitRows, settlementRows, userId);
+    const net = computeNetBalances(splitRows, settlementRows, userId);
 
-        const balances = [];
-        for (const [otherUserId, amount] of net) {
-            if (amount === 0) continue;
-            balances.push({
-                userId: otherUserId,
-                amount: Math.abs(amount),
-                direction: amount > 0 ? 'you_owe' : 'owes_you'
-            });
-        }
-
-        let totalOwedByYou = 0;
-        let totalOwedToYou = 0;
-        for (const balance of balances) {
-            if (balance.direction === 'you_owe') {
-                totalOwedByYou += balance.amount;
-            } else {
-                totalOwedToYou += balance.amount;
-            }
-        }
-
-        return res.status(200).json({
-            balances,
-            summary: { totalOwedByYou, totalOwedToYou, net: totalOwedToYou - totalOwedByYou }
+    const balances = [];
+    for (const [otherUserId, amount] of net) {
+        if (amount === 0) continue;
+        balances.push({
+            userId: otherUserId,
+            amount: Math.abs(amount),
+            direction: amount > 0 ? 'you_owe' : 'owes_you'
         });
-    } catch (err) {
-        console.error('Get global balances error:', err);
-        return res.status(500).json({ error: 'Something went wrong retrieving balances.' });
     }
-};
+
+    let totalOwedByYou = 0;
+    let totalOwedToYou = 0;
+    for (const balance of balances) {
+        if (balance.direction === 'you_owe') {
+            totalOwedByYou += balance.amount;
+        } else {
+            totalOwedToYou += balance.amount;
+        }
+    }
+
+    return res.status(200).json({
+        balances,
+        summary: { totalOwedByYou, totalOwedToYou, net: totalOwedToYou - totalOwedByYou }
+    });
+});

@@ -1,38 +1,43 @@
 ﻿import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import api from '../services/api'
 
-const schema = z.object({
-  email:    z.string().email('Please enter a valid email'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),})
+import * as authService from '../services/authService'
 
-type FormData = z.infer<typeof schema>
+import type { LoginInput } from '@expense-tracker/shared/auth'
+import { loginSchema } from '@expense-tracker/shared/auth'
+
+type FormData = LoginInput
 
 export default function Login() {
   const navigate  = useNavigate()
   const location  = useLocation()
   const { login } = useAuth()
-  const [apiError, setApiError]         = useState('')
+  const [apiError, setApiError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const from = (location.state as { from?: string })?.from ?? '/dashboard'
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(loginSchema),
   })
 
   const onSubmit = async (data: FormData) => {
     setApiError('')
     setIsSubmitting(true)
     try {
-      const res = await api.post('/auth/login', { email: data.email, password: data.password })
-      login(res.data.accessToken, res.data.user)
+      const user = await authService.logIn(data)
+      login(user)
       navigate(from, { replace: true })
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { message?: string } } }
+      const e = err as {
+        response?: {
+          data?: {
+            message?: string
+          }
+        }
+      }
       setApiError(e.response?.data?.message ?? 'Incorrect email or password. Please try again.')
     } finally {
       setIsSubmitting(false)

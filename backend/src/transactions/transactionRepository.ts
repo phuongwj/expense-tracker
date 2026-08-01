@@ -211,7 +211,7 @@ export const insertTransactionSplits = async (
             RETURNING 
                 id,
                 transaction_id AS "transactionId",
-                user_id AS "userID",
+                user_id AS "userId",
                 amount
             `,
             [transactionId, split.userId, split.amount]
