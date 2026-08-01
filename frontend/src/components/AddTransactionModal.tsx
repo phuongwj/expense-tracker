@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import Modal from './Modal'
 import { createPersonalTransaction } from '../services/transactions'
 import { getCategories, type Category } from "../services/categories"
-import Spinner, { simulateApiCall } from './Spinner'
 
 export default function AddTransactionModal({
   open,
