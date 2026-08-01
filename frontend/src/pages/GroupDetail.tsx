@@ -100,7 +100,7 @@ export default function GroupDetail() {
         <button onClick={() => navigate('/groups')} className="h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700">← Back</button>
         {isLeader && data?.group.joinCode && <button onClick={handleRegenerate} className="h-9 px-4 rounded-lg bg-white text-sm font-medium text-gray-700 border border-gray-200 ml-2">Regenerate code</button>}
         {isLeader && <button onClick={() => setConfirmDeleteOpen(true)} className="h-9 px-4 rounded-lg bg-red-600 text-white text-sm font-semibold ml-2">Delete Group</button>}
-        {!isLeader && isMember && <button onClick={() => setConfirmLeaveOpen(true)} className="h-9 px-4 rounded-lg bg-white text-sm font-medium text-gray-700 border border-gray-200 ml-2">Leave Group</button>}
+        {!isLeader && isMember && <button onClick={() => setConfirmLeaveOpen(true)} className="h-9 px-4 rounded-lg bg-red-600 text-white text-sm font-semibold ml-2">Leave Group</button>}
       </>
     }>
       <div className="text-sm text-gray-400 mb-4">
@@ -143,19 +143,24 @@ export default function GroupDetail() {
           <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-6">
             <h2 className="font-semibold text-gray-900 mb-4">Members ({data.members.length})</h2>
             <div className="divide-y divide-gray-100">
-              {data.members.map((m) => (
-                <div key={m.userId} className="flex items-center justify-between py-3">
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">{m.firstName} {m.lastName}</div>
-                    <div className="text-xs text-gray-400">Role: {m.role}</div>
+              {data.members.map((m) => {
+                const isCurrentUser = !!user && m.userId === user.id
+                const canRemoveMember = isLeader && !isCurrentUser
+
+                return (
+                  <div key={m.userId} className="flex items-center justify-between py-3">
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">{m.firstName} {m.lastName}</div>
+                      <div className="text-xs text-gray-400">Role: {m.role}</div>
+                    </div>
+                    {canRemoveMember ? (
+                      <button onClick={() => setConfirmRemoveUserId(m.userId)} className="text-xs text-red-600 font-medium hover:underline">Remove</button>
+                    ) : (
+                      <div className="text-xs text-gray-300">&nbsp;</div>
+                    )}
                   </div>
-                  {isLeader ? (
-                    <button onClick={() => setConfirmRemoveUserId(m.userId)} className="text-xs text-red-600 font-medium hover:underline">Remove</button>
-                  ) : (
-                    <div className="text-xs text-gray-300">&nbsp;</div>
-                  )}
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
           
