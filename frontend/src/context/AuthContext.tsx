@@ -3,80 +3,62 @@ import {
     useContext,
     useState,
     useEffect,
-    ReactNode,
+    type ReactNode,
   } from 'react'
-  import { useNavigate } from 'react-router-dom'
+import * as authService from '../services/authService'
+import type { PublicUser } from '@expense-tracker/shared/auth'
+
   
-  export interface User {
-    id: string
-    firstName: string
-    lastName: string
-    email: string
-    university: string
+type AuthContextValue = {
+  user: PublicUser | null
+  isLoading: boolean
+  login: (user: PublicUser) => void
+  logout: () => Promise<void>
+}
+  
+const AuthContext = createContext<AuthContextValue | undefined>(undefined)
+  
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<PublicUser | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  // On mount, try to silently restore the session using the refresh cookie.
+  // getMe() will 401 (no access token in memory yet), the api.ts response
+  // interceptor will attempt /auth/refresh, and if the refresh cookie is
+  // still valid, getMe() succeeds transparently on retry.
+  useEffect(() => {
+    authService
+      .getMe()
+      .then(setUser)
+      .catch(() => setUser(null))
+      .finally(() => setIsLoading(false))
+  }, [])
+
+  const login = (loggedInUser: PublicUser) => {
+    setUser(loggedInUser)
   }
-  
-  export interface AuthContextType {
-    user: User | null
-    token: string | null
-    isLoading: boolean
-    login: (token: string, user: User) => void
-    logout: () => void
-    isAuthenticated: boolean
-  }
-  
-  const AuthContext = createContext<AuthContextType | undefined>(undefined)
-  
-  export function AuthProvider({ children }: { children: ReactNode }) {
-    const [user, setUser]           = useState<User | null>(null)
-    const [token, setToken]         = useState<string | null>(null)
-    const [isLoading, setIsLoading] = useState(true)
-    const navigate                  = useNavigate()
-  
-    // On page refresh — restore session from localStorage
-    useEffect(() => {
-      const storedToken = localStorage.getItem('token')
-      const storedUser  = localStorage.getItem('user')
-      if (storedToken && storedUser) {
-        try {
-          setToken(storedToken)
-          setUser(JSON.parse(storedUser))
-        } catch {
-          localStorage.removeItem('token')
-          localStorage.removeItem('user')
-        }
-      }
-      setIsLoading(false)
-    }, [])
-  
-    function login(newToken: string, newUser: User) {
-      localStorage.setItem('token', newToken)
-      localStorage.setItem('user', JSON.stringify(newUser))
-      setToken(newToken)
-      setUser(newUser)
-    }
-  
-    function logout() {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      setToken(null)
+
+  const logout = async () => {
+    try {
+      await authService.logOut()
+    } finally {
       setUser(null)
-      navigate('/login')
     }
-  
-    return (
-      <AuthContext.Provider value={{
-        user, token, isLoading, login, logout,
-        isAuthenticated: !!user && !!token,
-      }}>
-        {children}
-      </AuthContext.Provider>
-    )
   }
-  
-  export function useAuth(): AuthContextType {
-    const context = useContext(AuthContext)
-    if (!context) throw new Error('useAuth must be used inside <AuthProvider>')
-    return context
-  }
-  
-  export default AuthContext
+
+  return (
+    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  )
+}
+
+export function useAuth() {
+  const ctx = useContext(AuthContext)
+  if (!ctx) {
+    throw new Error('useAuth must be used inside <AuthProvider>')
+  } 
+  return ctx
+}
+
+export default AuthContext
