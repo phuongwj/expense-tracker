@@ -4,6 +4,7 @@ import Layout from '../components/Layout'
 import Modal from '../components/Modal'
 import { getGroups, createGroup, joinGroup } from '../services/groupService'
 import type { GroupSummary } from '@expense-tracker/shared/groups'
+import { getErrorMessage, SUPPORT_EMAIL } from '../utils/errors'
 
 export default function Groups() {
   const navigate = useNavigate()
@@ -50,7 +51,7 @@ export default function Groups() {
       setFormName('')
       navigate(`/groups/${group.id}`)
     } catch (err) {
-      setFormError('Unable to create group. Please try again.')
+      setFormError(getErrorMessage(err, `Unable to create group due to unforeseen error. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
     } finally {
       setCreating(false)
     }
@@ -73,8 +74,7 @@ export default function Groups() {
       setFormCode('')
       navigate(`/groups/${group.id}`)
     } catch (err: any) {
-      const msg = err?.response?.data?.error || 'Unable to join group. Check code and try again.'
-      setFormError(msg)
+      setFormError(getErrorMessage(err, `Unable to join group. Check code and try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
     } finally {
       setJoining(false)
     }
@@ -109,7 +109,11 @@ export default function Groups() {
           <p className="text-sm text-gray-500 mb-4">Give your group a memorable name so members recognise it.</p>
           <label htmlFor="group-name" className="block text-sm font-medium text-gray-700 mb-2">Group name</label>
           <input id="group-name" value={formName} onChange={(e) => setFormName(e.target.value)} className="w-full rounded-md border border-gray-200 px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-[#3D6B4F]" placeholder="e.g. Dal Apartment 2B" />
-          {formError && <div className="text-sm text-red-600 mb-3">{formError}</div>}
+          {formError && (
+            <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">
+              ⚠ {formError}
+            </div>
+          )}
           <div className="flex justify-end gap-3">
             <button type="button" onClick={() => setCreateOpen(false)} className="h-11 px-6 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
             <button type="submit" disabled={creating} className="h-11 px-6 rounded-xl bg-[#3D6B4F] text-white text-sm font-semibold hover:bg-[#2D5240] disabled:opacity-50">{creating ? 'Creating…' : 'Create group'}</button>
@@ -123,7 +127,11 @@ export default function Groups() {
           <p className="text-sm text-gray-500 mb-4">Ask the group leader for the join code and enter it below.</p>
           <label htmlFor="join-code" className="block text-sm font-medium text-gray-700 mb-2">Join code</label>
           <input id="join-code" value={formCode} onChange={(e) => setFormCode(e.target.value)} className="w-full rounded-md border border-gray-200 px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-[#3D6B4F]" placeholder="AB12CD34" />
-          {formError && <div className="text-sm text-red-600 mb-3">{formError}</div>}
+          {formError && (
+            <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">
+              ⚠ {formError}
+            </div>
+          )}
           <div className="flex justify-end gap-3">
             <button type="button" onClick={() => setJoinOpen(false)} className="h-11 px-6 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
             <button type="submit" disabled={joining} className="h-11 px-6 rounded-xl bg-white text-sm font-semibold border border-gray-200 hover:bg-gray-50 disabled:opacity-50">{joining ? 'Joining…' : 'Join group'}</button>

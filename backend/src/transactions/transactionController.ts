@@ -17,7 +17,7 @@ import { CreateTransactionInput, GetTransactionsInput, UpdateTransactionInput, C
 import { TransactionSplit } from "./transactionModel.ts";
 import { asyncHandler } from "../middleware/asyncHandler.ts";
 
-/**
+/** 
  * POST /api/transactions
  * Creates a new personal transaction for the authenticated user.
  */
@@ -184,8 +184,8 @@ export const updateGroup = asyncHandler (async (
     const transaction = await updateGroupTransaction(
         id,
         groupId,
-        amount,
         type,
+        amount,
         categoryId ?? null,
         transactionDate,
         description,

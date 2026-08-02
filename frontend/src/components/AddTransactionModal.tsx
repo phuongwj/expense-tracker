@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import Modal from './Modal'
 import { createPersonalTransaction } from '../services/transactions'
 import { getCategories, type Category } from "../services/categories"
+import { getErrorMessage, SUPPORT_EMAIL } from '../utils/errors'
+
 export default function AddTransactionModal({
   open,
   onClose,
@@ -20,7 +22,7 @@ export default function AddTransactionModal({
   const [categoryId, setCategoryId] = useState<string | null>(null)
   const [recurring, setRecurring] = useState(false)
   const [repeats, setRepeats] = useState('Monthly')
-  const x = 42;
+  const [formError, setFormError] = useState<string | null>(null)
 
   useEffect(() => {
     async function loadCategories() {
@@ -36,6 +38,7 @@ export default function AddTransactionModal({
   }, [])
 
   const handleClose = () => {
+    setFormError(null)
     setKind('Expense')
     setAmount('')
     setDate(new Date().toISOString().slice(0, 10))
@@ -46,11 +49,30 @@ export default function AddTransactionModal({
     onClose()
   }
 
+  //client side validations before saving the transaction
   const handleSave = async () => {
+    setFormError(null)
+
+    const numericAmount = Number(amount)
+    if (!amount || isNaN(numericAmount) || numericAmount <= 0) {
+      setFormError('Please enter a valid amount greater than zero.')
+      return
+    }
+
+    if (!date) {
+      setFormError('Please select a date.')
+      return
+    }
+
+    if (!description.trim()) {
+      setFormError('Please enter a description.')
+      return
+    }
+
     try {
       await createPersonalTransaction({
         type: kind === 'Expense' ? 'expense' : 'income',
-        amount: Number(amount),
+        amount: numericAmount,
         categoryId,
         transactionDate: date,
         description: description || null,
@@ -60,11 +82,10 @@ export default function AddTransactionModal({
           : null,
       });
 
-      //refresh the dashboard before closing
       onCreated();
       handleClose();
     } catch (err) {
-      console.error("Failed to create transaction:", err);
+      setFormError(getErrorMessage(err, `An unexpected server error occured. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
     }
   };
 
@@ -74,6 +95,12 @@ export default function AddTransactionModal({
         Fields marked <span className="text-red-500">*</span> are required.
       </p>
 
+      {formError && (
+        <div className="mb-5 p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">
+          ⚠ {formError}
+        </div>
+      )}
+      
       <div className="grid grid-cols-2 gap-2 mb-5" role="group" aria-label="Transaction kind">
         <button
           type="button"

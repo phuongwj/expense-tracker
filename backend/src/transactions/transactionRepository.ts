@@ -96,9 +96,6 @@ export const getPersonalTransactions = async (
         query += ` AND recurring_interval = $${params.length + 1}`;
         params.push(filters.recurringInterval);
     }
-    if (!filters.startDate && !filters.endDate) {
-        query += ` AND transaction_date >= NOW() - INTERVAL '30 days'`;
-    }
 
     query += ` ORDER BY transaction_date DESC`;
 
@@ -282,18 +279,12 @@ export const getGroupTransactions = async (
         query += ` AND recurring_interval = $${params.length + 1}`;
         params.push(filters.recurringInterval);
     }
-    if (!filters.startDate && !filters.endDate) {
-        query += ` AND transaction_date >= NOW() - INTERVAL '30 days'`;
-    }
 
     query += ` ORDER BY transaction_date DESC`;
 
     const result = await pool.query(query, params);
     return result.rows;
 }
-
-//For Group Transaction Update & Delete, I'm assuming that middleware is used to check if the user performing 
-// the action is authorized (ex: part of the group, and group leader). 
 
 export const updateGroupTransaction = async (
     transactionId: string,

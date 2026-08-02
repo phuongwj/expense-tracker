@@ -2,9 +2,12 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import AddTransactionModal from '../components/AddTransactionModal'
+import AddGroupExpenseModal from '../components/AddGroupExpenseModal'
 import EditTransactionModal from '../components/EditTransactionModal'
 import ConfirmDialog from '../components/ConfirmDialog'
-import { getPersonalTransactions, deletePersonalTransaction, type Transaction} from '../services/transactions'
+import { getPersonalTransactions, deletePersonalTransaction, getGroupTransactions, deleteGroupTransaction, type Transaction } from '../services/transactions'
+import { getGroups, getGroup } from '../services/groupService'
+import type { GroupSummary, GroupDetailMember } from '@expense-tracker/shared/groups'
 
 const tabs = ['All', 'Expenses', 'Income', 'Recurring'] as const
 
@@ -16,19 +19,41 @@ export default function Transactions() {
   const [tab, setTab] = useState<(typeof tabs)[number]>('All')
   const [query, setQuery] = useState('')
   const [items, setItems] = useState<Transaction[]>([])
-  
+  const [view, setView] = useState('personal')
+  const [userGroups, setUserGroups] = useState<GroupSummary[]>([])
+  const [groupMembers, setGroupMembers] = useState<GroupDetailMember[]>([])
+  const [selectedMonth, setSelectedMonth] = useState('all')
 
   async function loadTransactions() {
     try {
-      const data = await getPersonalTransactions()
-      setItems(data)
+      if (view === 'personal') {
+        const data = await getPersonalTransactions()
+        setItems(data)
+        setGroupMembers([])
+      } else {
+        const [data, groupDetail] = await Promise.all([
+          getGroupTransactions(view),
+          getGroup(view),
+        ])
+        setItems(
+          data.map((t: Transaction) => ({ ...t, amount: Number(t.amount) }))
+        )
+        setGroupMembers(groupDetail.members)
+      }
     } catch (err) {
-      console.error("Failed to load transactions:", err)
+      console.error('Failed to load transactions:', err)
     }
   }
 
   useEffect(() => {
+    setSelectedMonth('all')
+    //since group view has no income tab, if switching away from personal then reset tab to default
+    if (view !== 'personal') setTab('All')
     loadTransactions()
+  }, [view])
+
+  useEffect(() => {
+    getGroups().then(setUserGroups).catch(() => setUserGroups([]))
   }, [])
 
   const filtered = items.filter((t) => {
@@ -36,6 +61,7 @@ export default function Transactions() {
     if (tab === 'Expenses') return t.type === 'expense'
     if (tab === 'Income') return t.type === 'income'
     if (tab === 'Recurring') return t.isRecurring
+    if (selectedMonth !== 'all' && monthKey(t.transactionDate) !== selectedMonth) return false
     return true
   })
 
@@ -49,11 +75,41 @@ export default function Transactions() {
 
   const balance = income - expenses
 
+  //helper functions to get a 'YYYY-MM' label from a given transaction date 
+  function monthKey(dateStr: string) {
+    const d = new Date(dateStr)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  }
+
+  function monthLabel(key: string) {
+    const [year, month] = key.split('-').map(Number)
+    return new Date(year, month - 1, 1).toLocaleString('default', { month: 'long', year: 'numeric' })
+  }
+
+  //the set of months used for dropdown filter, sorted by most recent first
+  const availableMonths = Array.from(
+    new Set(items.map((t) => monthKey(t.transactionDate)))
+  ).sort((a, b) => (a < b ? 1 : -1))
+
+  const visibleTabs = view === 'personal' ? tabs : tabs.filter((t) => t !== 'Income')
+
   return (
     <Layout
       title="Transactions"
       headerActions={
         <>
+          <select
+            value={view}
+            onChange={(e) => setView(e.target.value)}
+            className="h-9 border border-gray-200 rounded-lg px-3 text-sm bg-white text-gray-700"
+          >
+            <option value="personal">📍 Personal View</option>
+            {userGroups.map((g) => (
+              <option key={g.id} value={g.id}>
+                👥 {g.name}
+              </option>
+            ))}
+          </select>
           <button
             onClick={() => navigate('/import-csv')}
             className="h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700"
@@ -107,7 +163,7 @@ export default function Transactions() {
           />
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
         </div>
-        {tabs.map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -118,8 +174,17 @@ export default function Transactions() {
             {t}
           </button>
         ))}
-        <select className="h-10 border border-gray-200 rounded-lg px-3 text-sm bg-white text-gray-700">
-          <option>📅 May 2026</option>
+  <select
+          value={selectedMonth}
+          onChange={(e) => setSelectedMonth(e.target.value)}
+          className="h-10 border border-gray-200 rounded-lg px-3 text-sm bg-white text-gray-700"
+        >
+          <option value="all">📅 All time</option>
+          {availableMonths.map((m) => (
+            <option key={m} value={m}>
+              📅 {monthLabel(m)}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -188,36 +253,51 @@ export default function Transactions() {
         </table>
       </div>
 
-       <AddTransactionModal
+       {view === 'personal' ? (
+        <AddTransactionModal
           open={addOpen && !editTransaction}
           onClose={() => setAddOpen(false)}
           onCreated={loadTransactions}
         />
+      ) : (
+        <AddGroupExpenseModal
+          open={addOpen && !editTransaction}
+          onClose={() => setAddOpen(false)}
+          onCreated={loadTransactions}
+          groupId={view}
+          members={groupMembers}
+        />
+      )}
 
         <EditTransactionModal
           transaction={editTransaction}
           open={!!editTransaction && !addOpen}
           onClose={() => setEditTransaction(null)}
           onUpdated={loadTransactions}
+          groupId={view !== 'personal' ? view : undefined}
         />
 
         <ConfirmDialog
-        open={!!deleteId}
-        onCancel={() => setDeleteId(null)}
-        onConfirm={async () => {
-          if (!deleteId) return
+          open={!!deleteId}
+          onCancel={() => setDeleteId(null)}
+          onConfirm={async () => {
+            if (!deleteId) return
 
-          try {
-            await deletePersonalTransaction(deleteId)
+            try {
+              if (view === 'personal') {
+                await deletePersonalTransaction(deleteId)
+              } else {
+                await deleteGroupTransaction(view, deleteId)
+              }
 
-            setItems((prev) => prev.filter((t) => t.id !== deleteId))
-          } catch (err) {
-            console.error("Failed to delete transaction:", err)
-          } finally {
-            setDeleteId(null)
-          }
-        }}
-      />
+              setItems((prev) => prev.filter((t) => t.id !== deleteId))
+            } catch (err) {
+              console.error("Failed to delete transaction:", err)
+            } finally {
+              setDeleteId(null)
+            }
+          }}
+        />
     </Layout>
   )
 }

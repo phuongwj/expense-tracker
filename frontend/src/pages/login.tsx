@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { getErrorMessage, SUPPORT_EMAIL } from '../utils/errors'
 
 import * as authService from '../services/authService'
 
@@ -30,15 +31,8 @@ export default function Login() {
       const user = await authService.logIn(data)
       login(user)
       navigate(from, { replace: true })
-    } catch (err: unknown) {
-      const e = err as {
-        response?: {
-          data?: {
-            message?: string
-          }
-        }
-      }
-      setApiError(e.response?.data?.message ?? 'Incorrect email or password. Please try again.')
+    } catch (err) {
+      setApiError(getErrorMessage(err, `Unable to sign in right now. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
     } finally {
       setIsSubmitting(false)
     }

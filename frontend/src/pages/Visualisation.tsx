@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
-import { getPersonalTransactions, type Transaction } from '../services/transactions'
-
+import { getPersonalTransactions, getGroupTransactions, type Transaction } from '../services/transactions'
+import { getGroups } from '../services/groupService'
+import type { GroupSummary } from '@expense-tracker/shared/groups'
 
 const ranges = ['Week', 'Month', 'Semester'] as const
 
@@ -152,18 +153,35 @@ function getChartData(
 export default function Visualisation() {
   const [range, setRange] = useState<(typeof ranges)[number]>('Month')
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [view, setView] = useState('personal')
+  const [userGroups, setUserGroups] = useState<GroupSummary[]>([])
+  const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
     async function loadTransactions() {
+      setIsLoading(true)
       try {
-        const data = await getPersonalTransactions()
-        setTransactions(data)
+        if (view === 'personal') {
+          const data = await getPersonalTransactions()
+          setTransactions(data)
+        } else {
+          const data = await getGroupTransactions(view)
+          setTransactions(
+            data.map((t: Transaction) => ({ ...t, amount: Number(t.amount) }))
+          )
+        }
       } catch (err) {
         console.error("Failed to load transactions:", err)
+      } finally {
+        setIsLoading(false)
       }
     }
 
     loadTransactions()
+  }, [view])
+
+  useEffect(() => {
+    getGroups().then(setUserGroups).catch(() => setUserGroups([]))
   }, [])
 
   //apply the weekly/monthly/semester filter on transaction data
@@ -220,40 +238,63 @@ const chartData = getChartData(
     <Layout
       title="Spending Visualisation"
       headerActions={
-        <div className="flex bg-white border border-gray-200 rounded-lg overflow-hidden">
-          {ranges.map((r) => (
-            <button
-              key={r}
-              onClick={() => setRange(r)}
-              className={`h-9 px-4 text-sm font-medium ${
-                range === r ? 'bg-[#3D6B4F] text-white' : 'text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              {r}
-            </button>
-          ))}
-        </div>
+        <>
+          <select
+            value={view}
+            onChange={(e) => setView(e.target.value)}
+            className="h-9 border border-gray-200 rounded-lg px-3 text-sm bg-white text-gray-700"
+          >
+            <option value="personal">📍 Personal View</option>
+            {userGroups.map((g) => (
+              <option key={g.id} value={g.id}>
+                👥 {g.name}
+              </option>
+            ))}
+          </select>
+          <div className="flex bg-white border border-gray-200 rounded-lg overflow-hidden">
+            {ranges.map((r) => (
+              <button
+                key={r}
+                onClick={() => setRange(r)}
+                className={`h-9 px-4 text-sm font-medium ${
+                  range === r ? 'bg-[#3D6B4F] text-white' : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        </>
       }
     >
+    {isLoading ? (
+      <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center text-sm text-gray-400">
+        Loading…
+      </div>
+    ) : filteredTransactions.length === 0 ? (
+    <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center text-sm text-gray-400">
+      No transactions to show for this {range.toLowerCase()} {view === 'personal' ? 'in your personal view' : 'in this group'}.
+    </div>
+    ) : (
+    <>
       <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-6">
         <h2 className="font-semibold text-gray-900">Income vs Expenses - {range || ""}</h2>
-        <p className="text-xs text-gray-400 mb-6">{range || ""} breakdown · Personal view</p>
+        <p className="text-xs text-gray-400 mb-6">
+          {range || ""} breakdown · {view === 'personal' ? 'Personal view' : userGroups.find((g) => g.id === view)?.name ?? 'Group view'}
+        </p>
         <div className="flex items-end gap-6 h-48">
           {chartData.map((data) => (
             <div key={data.label} className="flex flex-col items-center gap-1">
-              <div className="flex items-end gap-1 h-40">
-                <div
-                  className="w-8 bg-[#2D5240] rounded-t"
-                  style={{
-                    height: `${(data.income / maxChartAmount) * 100}%`
-                  }}
-                />
-
+          <div className="flex items-end gap-1 h-40">
+                {view === 'personal' && (
+                  <div
+                    className="w-8 bg-[#2D5240] rounded-t"
+                    style={{ height: `${(data.income / maxChartAmount) * 100}%` }}
+                  />
+                )}
                 <div
                   className="w-8 bg-[#C0554F] rounded-t"
-                  style={{
-                    height: `${(data.expense / maxChartAmount) * 100}%`
-                  }}
+                  style={{ height: `${(data.expense / maxChartAmount) * 100}%` }}
                 />
               </div>
               <div className="text-xs text-gray-400 mt-1">{data.label}</div>
@@ -278,7 +319,7 @@ const chartData = getChartData(
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className={`grid grid-cols-1 ${view === 'personal' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-4`}>
         <Stat
           label="Avg. daily spend"
           value={`$${(expenses / 31).toFixed(2)}`}
@@ -286,24 +327,21 @@ const chartData = getChartData(
         />
         <Stat
           label="Biggest expense"
-          value={
-            byCategory.length > 0
-              ? `${biggestExpense.name} $${biggestExpense.amount.toFixed(2)}`
-              : "-"
-          }
-          sub={
-            byCategory.length > 0
-              ? `${biggestExpense.pct}% of expenses`
-              : ""
-          }
+          value={byCategory.length > 0 ? `${biggestExpense.name} $${biggestExpense.amount.toFixed(2)}` : "-"}
+          sub={byCategory.length > 0 ? `${biggestExpense.pct}% of expenses` : ""}
         />
-        <Stat
-          label="Savings rate"
-          value={`${income === 0 ? 0 : ((income - expenses) / income * 100).toFixed(1)}%`}
-          sub="Income remaining after expenses"
-        />
+        {view === 'personal' && (
+          <Stat
+            label="Savings rate"
+            value={`${income === 0 ? 0 : ((income - expenses) / income * 100).toFixed(1)}%`}
+            sub="Income remaining after expenses"
+          />
+        )}
       </div>
-    </Layout>
+    </>
+  )}
+</Layout>
+
   )
 }
 
