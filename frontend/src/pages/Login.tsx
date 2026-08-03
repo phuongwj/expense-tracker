@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { getErrorMessage, SUPPORT_EMAIL } from '../utils/errors'
 
 import * as authService from '../services/authService'
 
@@ -30,15 +31,8 @@ export default function Login() {
       const user = await authService.logIn(data)
       login(user)
       navigate(from, { replace: true })
-    } catch (err: unknown) {
-      const e = err as {
-        response?: {
-          data?: {
-            message?: string
-          }
-        }
-      }
-      setApiError(e.response?.data?.message ?? 'Incorrect email or password. Please try again.')
+    } catch (err) {
+      setApiError(getErrorMessage(err, `Unable to sign in right now. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
     } finally {
       setIsSubmitting(false)
     }
@@ -51,17 +45,13 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex">
-      <div className="hidden lg:flex w-[420px] shrink-0 bg-[#2D5240] flex-col justify-between p-12">
-        <div className="text-3xl text-white font-bold">Expense Tracker</div>
+      <div className="hidden lg:flex w-[420px] shrink-0 bg-[#2D5240] flex-col justify-center p-12">
+        <div className="text-3xl text-white font-bold mb-20">Expense Tracker</div>
         <div>
           <h1 className="text-4xl font-light text-white leading-tight mb-4">Welcome <strong>back</strong></h1>
           <p className="text-white/60 text-sm leading-relaxed">
             Sign in to view your transactions, check group balances, and see your AI-powered insights.
           </p>
-        </div>
-        <div className="flex gap-10">
-          <div><div className="text-3xl font-semibold text-white">$1,842</div><div className="text-xs text-white/50 mt-1">Your balance</div></div>
-          <div><div className="text-3xl font-semibold text-white">3</div><div className="text-xs text-white/50 mt-1">Active groups</div></div>
         </div>
       </div>
       <div className="flex-1 flex items-center justify-center p-8 bg-[#F2F0EA]">

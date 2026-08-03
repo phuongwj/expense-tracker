@@ -6,6 +6,10 @@ import ConfirmModal from '../components/ConfirmModal'
 import { useAuth } from '../context/AuthContext'
 import { getGroup, regenerateGroupJoinCode, removeMember, deleteGroup } from '../services/groupService'
 import type { GroupDetailResponse } from '@expense-tracker/shared/groups'
+import { getGroupTransactions, type GroupTransaction, getGroupBalances, type Balance } from '../services/transactions'
+import AddGroupExpenseModal from '../components/AddGroupExpenseModal'
+import SettleBalancesModal from '../components/SettleBalancesModal'
+import { SUPPORT_EMAIL, getErrorMessage } from '../utils/errors'
 
 export default function GroupDetail() {
   const { id } = useParams()
@@ -13,14 +17,41 @@ export default function GroupDetail() {
   const [data, setData] = useState<GroupDetailResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [transactions, setTransactions] = useState<GroupTransaction[]>([])
+  const [addTxOpen, setAddTxOpen] = useState(false)
+  const [balances, setBalances] = useState<Balance[]>([])
+  const [settleTarget, setSettleTarget] = useState<Balance | null>(null)
+  
+
+  async function loadTransactions() {
+    if (!id) return
+    const data = await getGroupTransactions(id)
+    setTransactions(
+      data.map((t: GroupTransaction) => ({
+        ...t,
+        amount: Number(t.amount),
+        splits: t.splits?.map((s) => ({ ...s, amount: Number(s.amount) })),
+      }))
+    )
+  }
+
+  async function loadBalances() {
+    if (!id) { 
+      return 
+    }
+    const res = await getGroupBalances(id)
+    setBalances(res.balances)
+  }
 
   useEffect(() => {
-    if (!id) return
+    if (!id)  {
+      return;
+    }
+
     setIsLoading(true)
     getGroup(id)
       .then(setData)
       .catch((err: any) => {
-        // If backend returns 404 for non-members or missing group, show a friendly message
         if (err?.response?.status === 404) {
           setError('No group to display.')
         } else {
@@ -29,20 +60,30 @@ export default function GroupDetail() {
         setData(null)
       })
       .finally(() => setIsLoading(false))
+    loadTransactions()
+    loadBalances()
   }, [id])
+
+  //helper function to get the name of a group member by their userId
+  function memberName(userId: string) {
+    const m = data?.members.find((mem) => mem.userId === userId)
+    return m ? `${m.firstName} ${m.lastName}` : 'Unknown'
+  }
 
   const { user } = useAuth()
   const isLeader = !!(data && user && data.members.find((m) => m.userId === user.id && m.role === 'leader'))
   const isMember = !!(data && user && data.members.find((m) => m.userId === user.id))
 
   const handleLeave = async () => {
-    if (!id || !user) return
+    if (!id || !user) {
+      return
+    }
+
     try {
       await removeMember(id, user.id)
       navigate('/groups')
     } catch (err: any) {
-      const msg = err?.response?.data?.error || 'Unable to leave group.'
-      setInfoModal({ title: 'Error', message: msg })
+      setInfoModal({ title: 'Error', message: getErrorMessage(err, `Unable to leave group. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`) })
     } finally {
       setConfirmLeaveOpen(false)
     }
@@ -60,8 +101,7 @@ export default function GroupDetail() {
       setData((cur) => cur ? { ...cur, group: { ...cur.group, joinCode } } : cur)
       setInfoModal({ title: 'New join code', message: joinCode })
     } catch (err: any) {
-      const msg = err?.response?.data?.error || 'Unable to regenerate join code.'
-      setInfoModal({ title: 'Error', message: msg })
+      setInfoModal({ title: 'Error', message: getErrorMessage(err, `Unable to regenerate join code. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`) })
     }
   }
 
@@ -72,8 +112,7 @@ export default function GroupDetail() {
       setData((cur) => cur ? { ...cur, members: cur.members.filter((m) => m.userId !== userId) } : cur)
       setConfirmRemoveUserId(null)
     } catch (err: any) {
-      const msg = err?.response?.data?.error || 'Unable to remove member.'
-      setInfoModal({ title: 'Error', message: msg })
+      setInfoModal({ title: 'Error', message: getErrorMessage(err, `Unable to remove member. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`) })
     }
   }
 
@@ -84,8 +123,7 @@ export default function GroupDetail() {
       setConfirmDeleteOpen(false)
       navigate('/groups')
     } catch (err: any) {
-      const msg = err?.response?.data?.error || 'Unable to delete group.'
-      setInfoModal({ title: 'Error', message: msg })
+      setInfoModal({ title: 'Error', message: getErrorMessage(err, `Unable to delete group. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`) })
     }
   }
 
@@ -163,19 +201,102 @@ export default function GroupDetail() {
               })}
             </div>
           </div>
-          
-                    <ConfirmModal open={!!confirmRemoveUserId} title="Remove member" message="Remove this member from the group?" onConfirm={() => performRemove(confirmRemoveUserId!)} onClose={() => setConfirmRemoveUserId(null)} />
-                    <ConfirmModal open={confirmDeleteOpen} title="Delete group" message="Delete this group permanently?" onConfirm={performDelete} onClose={() => setConfirmDeleteOpen(false)} />
-                    <ConfirmModal open={confirmLeaveOpen} title="Leave group" message="Are you sure you want to leave this group?" onConfirm={handleLeave} onClose={() => setConfirmLeaveOpen(false)} />
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="font-semibold text-gray-900">Transactions</h2>
+              <button
+                onClick={() => setAddTxOpen(true)}
+                className="h-9 px-4 rounded-lg bg-[#3D6B4F] text-white text-sm font-semibold hover:bg-[#2D5240]"
+              >
+                + Add Transaction
+              </button>
+            </div>
+            {transactions.length === 0 && (
+              <div className="text-sm text-gray-400">No transactions yet.</div>
+            )}
+            <div className="divide-y divide-gray-100">
+              {transactions.map((t) => (
+                <div key={t.id} className="flex items-center justify-between py-3">
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{t.description}</div>
+                    <div className="text-xs text-gray-400">
+                      Paid by {memberName(t.paidBy)} · {new Date(t.transactionDate).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <div className={`text-sm font-semibold ${t.type === 'expense' ? 'text-red-700' : 'text-green-700'}`}>
+                    {t.type === 'expense' ? '−' : '+'}${t.amount.toFixed(2)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-6">
+            <h2 className="font-semibold text-gray-900 mb-4">Balances</h2>
+            {balances.length === 0 && (
+              <div className="text-sm text-gray-400">All settled up ✓</div>
+            )}
+            <div className="flex flex-col gap-2">
+              {balances.map((b) => (
+                <div
+                  key={b.userId}
+                  className={`flex items-center justify-between rounded-xl px-4 py-3 ${
+                    b.direction === 'you_owe' ? 'bg-red-50' : 'bg-green-50'
+                  }`}
+                >
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{memberName(b.userId)}</div>
+                    <div className={`text-sm font-semibold ${b.direction === 'you_owe' ? 'text-red-700' : 'text-green-700'}`}>
+                      {b.direction === 'you_owe' ? `You owe $${b.amount.toFixed(2)}` : `Owes you $${b.amount.toFixed(2)}`}
+                    </div>
+                  </div>
+                  {b.direction === 'owes_you' && (
+                    <button
+                      onClick={() => setSettleTarget(b)}
+                      className="h-9 px-4 rounded-lg bg-[#3D6B4F] text-white text-sm font-semibold hover:bg-[#2D5240]"
+                    >
+                      Settle up
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+          <AddGroupExpenseModal
+            open={addTxOpen}
+            onClose={() => setAddTxOpen(false)}
+            onCreated={() => {
+              loadTransactions();
+              loadBalances();
+            }}
+            groupId={id!}
+            members={data.members}
+          />
+          {settleTarget && (
+            <SettleBalancesModal
+              open={!!settleTarget}
+              onClose={() => setSettleTarget(null)}
+              onSettled={() => {
+                loadBalances()
+                loadTransactions()
+              }}
+              groupId={id!}
+              repayingUserId={settleTarget.userId}
+              repayingUserName={memberName(settleTarget.userId)}
+              amount={settleTarget.amount}
+            />
+          )}
+          <ConfirmModal open={!!confirmRemoveUserId} title="Remove member" message="Remove this member from the group?" onConfirm={() => performRemove(confirmRemoveUserId!)} onClose={() => setConfirmRemoveUserId(null)} />
+          <ConfirmModal open={confirmDeleteOpen} title="Delete group" message="Delete this group permanently?" onConfirm={performDelete} onClose={() => setConfirmDeleteOpen(false)} />
+          <ConfirmModal open={confirmLeaveOpen} title="Leave group" message="Are you sure you want to leave this group?" onConfirm={handleLeave} onClose={() => setConfirmLeaveOpen(false)} />
 
-                    {infoModal && (
-                      <Modal open={true} onClose={() => setInfoModal(null)} title={infoModal.title}>
-                        <p className="text-sm text-gray-700 mb-4">{infoModal.message}</p>
-                        <div className="flex justify-end">
-                          <button onClick={() => setInfoModal(null)} className="h-10 px-5 rounded-xl border border-gray-200 text-sm">Close</button>
-                        </div>
-                      </Modal>
-                    )}
+          {infoModal && (
+            <Modal open={true} onClose={() => setInfoModal(null)} title={infoModal.title}>
+              <p className="text-sm text-gray-700 mb-4">{infoModal.message}</p>
+              <div className="flex justify-end">
+                <button onClick={() => setInfoModal(null)} className="h-10 px-5 rounded-xl border border-gray-200 text-sm">Close</button>
+              </div>
+            </Modal>
+          )}
         </>
       )}
     </Layout>
