@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Modal from './Modal'
 import { createGroupTransaction } from '../services/transactions'
 import { useAuth } from '../context/AuthContext'
@@ -27,7 +27,19 @@ export default function AddGroupExpenseModal({
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+
+  const totalRef = useRef<HTMLDivElement>(null)
+  const descriptionRef = useRef<HTMLDivElement>(null)
+  const paidByRef = useRef<HTMLDivElement>(null)
+  const splitRef = useRef<HTMLDivElement>(null)
+  const fieldRefs: Record<string, React.RefObject<HTMLDivElement | null>> = {
+    total: totalRef,
+    description: descriptionRef,
+    paidBy: paidByRef,
+    split: splitRef,
+  }
 
   const total = parseFloat(totalAmount) || 0
   const memberCount = members.length
@@ -53,23 +65,23 @@ export default function AddGroupExpenseModal({
     setDate(new Date().toISOString().slice(0, 10))
     setCustomAmounts({})
     setFormError(null)
+    setFieldErrors({})
     onClose()
   }
 
   const handleSave = async () => {
     setFormError(null)
 
+    const errors: Record<string, string> = {}
+
     if (!total || total <= 0) {
-      setFormError('Please enter a valid total amount.')
-      return
+      errors.total = 'Please enter a valid total amount.'
     }
     if (!description.trim()) {
-      setFormError('Please enter a description.')
-      return
+      errors.description = 'Please enter a description.'
     }
     if (!paidBy) {
-      setFormError('Please select who paid.')
-      return
+      errors.paidBy = 'Please select who paid.'
     }
 
     let splits: { userId: string; amount: number }[]
@@ -81,14 +93,21 @@ export default function AddGroupExpenseModal({
         .filter((m) => (parseFloat(customAmounts[m.userId]) || 0) > 0)
         .map((m) => ({ userId: m.userId, amount: parseFloat(customAmounts[m.userId]) }))
 
-      if (splits.length === 0) {
-        setFormError('Please enter at least one custom split amount.')
-        return
+      if (!errors.total) {
+        if (splits.length === 0) {
+          errors.split = 'Please enter at least one custom split amount.'
+        } else if (!isBalanced) {
+          errors.split = `Splits must add up to the total ($${total.toFixed(2)}). Currently: $${customTotal.toFixed(2)}.`
+        }
       }
-      if (!isBalanced) {
-        setFormError(`Splits must add up to the total ($${total.toFixed(2)}). Currently: $${customTotal.toFixed(2)}.`)
-        return
-      }
+    }
+
+    setFieldErrors(errors)
+
+    const firstInvalidField = ['total', 'description', 'paidBy', 'split'].find((f) => errors[f])
+    if (firstInvalidField) {
+      fieldRefs[firstInvalidField].current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
     }
 
     setSaving(true)
@@ -122,30 +141,30 @@ export default function AddGroupExpenseModal({
         </div>
       )}
 
-      <Field label="Total amount *" htmlFor="ge-total">
+      <Field label="Total amount *" htmlFor="ge-total" error={fieldErrors.total} fieldRef={totalRef}>
         <input
           id="ge-total"
           value={totalAmount}
           onChange={(e) => setTotalAmount(e.target.value)}
           placeholder="0.00"
-          className="input"
+          className={`input ${fieldErrors.total ? 'error' : ''}`}
         />
       </Field>
-      <Field label="Description *" htmlFor="ge-description">
+      <Field label="Description *" htmlFor="ge-description" error={fieldErrors.description} fieldRef={descriptionRef}>
         <input
           id="ge-description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="e.g. Costco groceries"
-          className="input"
+          className={`input ${fieldErrors.description ? 'error' : ''}`}
         />
       </Field>
-      <Field label="Paid by *" htmlFor="ge-paidby">
+      <Field label="Paid by *" htmlFor="ge-paidby" error={fieldErrors.paidBy} fieldRef={paidByRef}>
         <select
           id="ge-paidby"
           value={paidBy}
           onChange={(e) => setPaidBy(e.target.value)}
-          className="input"
+          className={`input ${fieldErrors.paidBy ? 'error' : ''}`}
         >
           {members.map((m) => (
             <option key={m.userId} value={m.userId}>
@@ -216,15 +235,18 @@ export default function AddGroupExpenseModal({
         </div>
       </div>
 
-      <div
-        className={`flex items-center justify-between rounded-xl px-4 py-2.5 mb-6 text-sm font-medium ${
-          isBalanced ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-800'
-        }`}
-      >
-        <span>
-          Total: ${splitTotal.toFixed(2)} / ${total.toFixed(2)}
-        </span>
-        <span>{isBalanced ? '✓ Balanced' : '⚠ Not balanced'}</span>
+      <div ref={splitRef} className="mb-6">
+        <div
+          className={`flex items-center justify-between rounded-xl px-4 py-2.5 text-sm font-medium ${
+            isBalanced ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-800'
+          } ${fieldErrors.split ? 'ring-1 ring-red-400' : ''}`}
+        >
+          <span>
+            Total: ${splitTotal.toFixed(2)} / ${total.toFixed(2)}
+          </span>
+          <span>{isBalanced ? '✓ Balanced' : '⚠ Not balanced'}</span>
+        </div>
+        {fieldErrors.split && <p className="mt-1.5 text-xs text-red-600">{fieldErrors.split}</p>}
       </div>
 
       <div className="flex gap-3">
@@ -243,17 +265,31 @@ export default function AddGroupExpenseModal({
       <style>{`
         .input { width:100%; height:44px; border:1px solid #e5e7eb; border-radius:0.75rem; padding:0 14px; font-size:0.875rem; outline:none; }
         .input:focus { border-color:#3D6B4F; }
+        .input.error { border-color:#ef4444; }
         .label { display:block; font-size:11px; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:0.03em; margin-bottom:6px; }
       `}</style>
     </Modal>
   )
 }
 
-function Field({ label, htmlFor, children }: { label: string; htmlFor: string; children: React.ReactNode }) {
+function Field({
+  label,
+  htmlFor,
+  children,
+  error,
+  fieldRef,
+}: {
+  label: string
+  htmlFor: string
+  children: React.ReactNode
+  error?: string
+  fieldRef?: React.RefObject<HTMLDivElement | null>
+}) {
   return (
-    <div className="mb-4">
+    <div className="mb-4" ref={fieldRef}>
       <label className="label" htmlFor={htmlFor}>{label}</label>
       {children}
+      {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
     </div>
   )
 }

@@ -97,7 +97,7 @@ export const getPersonalTransactions = async (
         params.push(filters.recurringInterval);
     }
 
-    query += ` ORDER BY transaction_date DESC`;
+    query += ` ORDER BY t.transaction_date DESC, t.created_at DESC`;
 
     const result = await pool.query(query, params);
     return result.rows;
@@ -280,7 +280,7 @@ export const getGroupTransactions = async (
         params.push(filters.recurringInterval);
     }
 
-    query += ` ORDER BY transaction_date DESC`;
+    query += ` ORDER BY t.transaction_date DESC, t.created_at DESC`;
 
     const result = await pool.query(query, params);
     return result.rows;
@@ -297,24 +297,42 @@ export const updateGroupTransaction = async (
     isRecurring: boolean,
     recurringInterval: string | null
 ): Promise<Transaction | null> => {
+    //captures the pre-update amount (via the `old` CTE, which sees the same snapshot as the rest of this
+    //statement) so the splits can be rescaled by the same ratio the total changed by. Keeps whatever shape
+    //the splits had - equal or custom - without needing the caller to resubmit a new split breakdown.
     const query = `
-        UPDATE transactions
-        SET type = $1, amount = $2, category_id = $3, transaction_date = $4,
-            description = $5, is_recurring = $6, recurring_interval = $7,
-            updated_at = now()
-        WHERE id = $8 AND group_id = $9
-        RETURNING
-            id,
-            user_id AS "userId",
-            group_id AS "groupId",
-            paid_by AS "paidBy",
-            category_id AS "categoryId",
-            type,
-            amount,
-            transaction_date AS "transactionDate",
-            description,
-            is_recurring AS "isRecurring",
-            recurring_interval AS "recurringInterval"
+        WITH old AS (
+            SELECT amount FROM transactions WHERE id = $8 AND group_id = $9
+        ),
+        updated AS (
+            UPDATE transactions
+            SET type = $1, amount = $2, category_id = $3, transaction_date = $4,
+                description = $5, is_recurring = $6, recurring_interval = $7,
+                updated_at = now()
+            WHERE id = $8 AND group_id = $9
+            RETURNING
+                id, user_id, group_id, paid_by, category_id, type, amount,
+                transaction_date, description, is_recurring, recurring_interval
+        ),
+        scaled_splits AS (
+            UPDATE transaction_splits
+            SET amount = ROUND(transaction_splits.amount * ($2::numeric / old.amount), 2)
+            FROM old
+            WHERE transaction_splits.transaction_id = $8
+        )
+        SELECT
+            updated.id,
+            updated.user_id AS "userId",
+            updated.group_id AS "groupId",
+            updated.paid_by AS "paidBy",
+            updated.category_id AS "categoryId",
+            updated.type,
+            updated.amount,
+            updated.transaction_date AS "transactionDate",
+            updated.description,
+            updated.is_recurring AS "isRecurring",
+            updated.recurring_interval AS "recurringInterval"
+        FROM updated
     `;
 
     const result = await pool.query(query, [type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval, transactionId, groupId]);
