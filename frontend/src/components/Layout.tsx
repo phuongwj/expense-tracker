@@ -26,7 +26,7 @@ function NavSection({ title, items }: { title: string; items: typeof navMain }) 
           <NavLink
             key={item.to}
             to={item.to}
-            className={({ isActive }) =>
+            className={({ isActive }: { isActive: boolean }) =>
               `flex items-center justify-between px-3 py-2 rounded-lg text-sm transition ${
                 isActive ? 'bg-white/10 text-white font-medium' : 'text-white/70 hover:bg-white/5 hover:text-white'
               }`
