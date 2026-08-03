@@ -57,13 +57,13 @@ export default function Transactions() {
   }, [])
 
   const filtered = items.filter((t) => {
-    if (query && t.description && !t.description.toLowerCase().includes(query.toLowerCase())) return false
-    if (tab === 'Expenses') return t.type === 'expense'
-    if (tab === 'Income') return t.type === 'income'
-    if (tab === 'Recurring') return t.isRecurring
-    if (selectedMonth !== 'all' && monthKey(t.transactionDate) !== selectedMonth) return false
-    return true
-  })
+  if (query && t.description && !t.description.toLowerCase().includes(query.toLowerCase())) return false
+  if (selectedMonth !== 'all' && monthKey(t.transactionDate) !== selectedMonth) return false
+  if (tab === 'Expenses') return t.type === 'expense'
+  if (tab === 'Income') return t.type === 'income'
+  if (tab === 'Recurring') return t.isRecurring
+  return true
+})
 
   const income = items
   .filter((t) => t.type === 'income')
@@ -134,20 +134,22 @@ export default function Transactions() {
         </>
       }
     >
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div className={`grid grid-cols-1 ${view === 'personal' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-4 mb-6`}>
+        {view === 'personal' && (
+          <Card
+            label="Balance"
+            value={`$${balance.toFixed(2)}`}
+          />
+        )}
+        {view === 'personal' && (
+          <Card
+            label="Income"
+            value={`+$${income.toFixed(2)}`}
+            valueClass="text-green-700"
+          />
+        )}
         <Card
-          label="Balance"
-          value={`$${balance.toFixed(2)}`}
-            />
-
-        <Card
-          label="Income"
-          value={`+$${income.toFixed(2)}`}
-          valueClass="text-green-700"
-        />
-
-        <Card
-          label="Expenses"
+          label={view === 'personal' ? 'Expenses' : 'Total spent'}
           value={`−$${expenses.toFixed(2)}`}
           valueClass="text-red-700"
         />
