@@ -7,6 +7,7 @@ import * as authService from '../services/authService'
 
 import type { SignupInput } from '@expense-tracker/shared/auth'
 import { signupSchema } from '@expense-tracker/shared/auth'
+import { getErrorMessage, SUPPORT_EMAIL } from '../utils/errors'
 
 type FormData = SignupInput
 
@@ -28,8 +29,7 @@ export default function Signup() {
       login(user)
       navigate('/dashboard', { replace: true })
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { message?: string } } }
-      setApiError(e.response?.data?.message ?? 'Something went wrong. Please try again.')
+      setApiError(getErrorMessage(err, `Unable to create an account due to a server issue. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
     } finally {
       setIsSubmitting(false)
     }
