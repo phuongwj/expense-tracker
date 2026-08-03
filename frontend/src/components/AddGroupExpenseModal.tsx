@@ -29,6 +29,8 @@ export default function AddGroupExpenseModal({
   const [formError, setFormError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [isRecurring, setIsRecurring] = useState(false)
+  const [recurringInterval, setRecurringInterval] = useState('Monthly')
 
   const totalRef = useRef<HTMLDivElement>(null)
   const descriptionRef = useRef<HTMLDivElement>(null)
@@ -66,6 +68,8 @@ export default function AddGroupExpenseModal({
     setCustomAmounts({})
     setFormError(null)
     setFieldErrors({})
+    setIsRecurring(false)
+    setRecurringInterval('Monthly')
     onClose()
   }
 
@@ -119,6 +123,10 @@ export default function AddGroupExpenseModal({
         description: description || null,
         paidBy,
         splits,
+        isRecurring,
+        recurringInterval: isRecurring
+          ? recurringInterval.toLowerCase() as 'weekly' | 'monthly' | 'yearly'
+          : null,
       })
       onCreated()
       handleClose()
@@ -248,7 +256,34 @@ export default function AddGroupExpenseModal({
         </div>
         {fieldErrors.split && <p className="mt-1.5 text-xs text-red-600">{fieldErrors.split}</p>}
       </div>
+      <div className="flex items-center justify-between py-3 border-t border-gray-100 mb-1">
+          <div>
+              <label htmlFor="ge-recurring" className="text-sm font-medium text-gray-900">Recurring transaction</label>
+              <div className="text-xs text-gray-400">Auto-adds on a schedule — e.g. rent, subscriptions</div>
+          </div>
+          <button
+              id="ge-recurring"
+              type="button"
+              onClick={() => setIsRecurring((r) => !r)}
+              className={`w-11 h-6 rounded-full transition relative shrink-0 ${isRecurring ? 'bg-[#3D6B4F]' : 'bg-gray-200'}`}
+          >
+              <span
+                  className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition ${
+                      isRecurring ? 'left-5' : 'left-0.5'
+                  }`}
+              />
+          </button>
+      </div>
 
+      {isRecurring && (
+          <Field label="Repeats" htmlFor="ge-repeats">
+              <select id="ge-repeats" value={recurringInterval} onChange={(e) => setRecurringInterval(e.target.value)} className="input">
+                  <option>Weekly</option>
+                  <option>Monthly</option>
+                  <option>Yearly</option>
+              </select>
+          </Field>
+      )}
       <div className="flex gap-3">
         <button onClick={handleClose} className="flex-1 h-11 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">
           Cancel

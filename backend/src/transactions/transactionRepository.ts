@@ -1,20 +1,59 @@
 import pool from "../config/db.ts";
-import { Transaction, TransactionSplit, BalanceRow, Settlement } from "./transactionModel.ts";
+import { Transaction, TransactionSplit, BalanceRow, Settlement, DueRecurringTemplate } from "./transactionModel.ts";
 
+
+/**
+ * Helper function used to calculate the next occurence of a recurring transaction.
+ * Given a transaction's date and its recurring interval, returns the date that
+ * the next occurrence is due, as an ISO date string ("YYYY-MM-DD");
+ */
+const calculateNextOccurrence = (fromDate: string, interval: string): string => {
+    const date = new Date(`${fromDate}T00:00:00Z`);
+
+    switch (interval) {
+        case 'daily':
+            date.setUTCDate(date.getUTCDate() + 1);
+            break;
+        case 'weekly':
+            date.setUTCDate(date.getUTCDate() + 7);
+            break;
+        case 'biweekly':
+            date.setUTCDate(date.getUTCDate() + 14);
+            break;
+        case 'monthly':
+            date.setUTCMonth(date.getUTCMonth() + 1);
+            break;
+        case 'yearly':
+            date.setUTCFullYear(date.getUTCFullYear() + 1);
+            break;
+    }
+
+    return date.toISOString().split('T')[0];
+};
+
+//helpeer function to get today's date in ISO format (YYYY-MM-DD)
+const todayISODate = (): string => new Date().toISOString().split('T')[0];
 
 export const createPersonalTransaction = async (
     userId: string,
     type: 'expense' | 'income',
     amount: number,
     categoryId: string | null,
-    transactionDate: string, //ISO date e.g. "2026-07-14"
+    transactionDate: string,
     description: string | null,
     isRecurring: boolean,
     recurringInterval: string | null
 ): Promise<Transaction> => {
+    const nextOccurrence = isRecurring && recurringInterval
+        ? calculateNextOccurrence(transactionDate, recurringInterval)
+        : null;
+
     const query = `
-        INSERT INTO transactions (user_id, amount, type, category_id, transaction_date, description, is_recurring, recurring_interval)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO transactions (
+            user_id, amount, type, category_id, transaction_date, description,
+            is_recurring, recurring_interval, next_occurrence
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING
             id,
             user_id AS "userId",
@@ -29,7 +68,7 @@ export const createPersonalTransaction = async (
             recurring_interval AS "recurringInterval"
     `;
 
-    const result = await pool.query(query, [userId, amount, type, categoryId, transactionDate, description, isRecurring, recurringInterval]);
+    const result = await pool.query(query, [userId, amount, type, categoryId, transactionDate, description, isRecurring, recurringInterval, nextOccurrence]);
     return result.rows[0];
 }
 
@@ -114,12 +153,16 @@ export const updatePersonalTransaction = async (
     isRecurring: boolean,
     recurringInterval: string | null
 ): Promise<Transaction | null> => {
+    const nextOccurrence = isRecurring && recurringInterval
+        ? calculateNextOccurrence(transactionDate, recurringInterval)
+        : null;
+
     const query = `
         UPDATE transactions
         SET amount = $1, type = $2, category_id = $3, transaction_date = $4,
             description = $5, is_recurring = $6, recurring_interval = $7,
-            updated_at = now()
-        WHERE id = $8 AND user_id = $9 AND group_id IS NULL
+            next_occurrence = $8, updated_at = now()
+        WHERE id = $9 AND user_id = $10 AND group_id IS NULL
         RETURNING
             id,
             user_id AS "userId",
@@ -134,7 +177,7 @@ export const updatePersonalTransaction = async (
             recurring_interval AS "recurringInterval"
     `;
 
-    const result = await pool.query(query, [amount, type, categoryId, transactionDate, description, isRecurring, recurringInterval, transactionId, userId]);
+    const result = await pool.query(query, [amount, type, categoryId, transactionDate, description, isRecurring, recurringInterval, nextOccurrence, transactionId, userId]);
     return result.rows[0] || null;
 }
 
@@ -170,9 +213,16 @@ export const createGroupTransaction = async (
     isRecurring: boolean,
     recurringInterval: string | null
 ): Promise<Transaction> => {
+    const nextOccurrence = isRecurring && recurringInterval
+        ? calculateNextOccurrence(transactionDate, recurringInterval)
+        : null;
+
     const query = `
-        INSERT INTO transactions (user_id, group_id, paid_by, type, amount, category_id, transaction_date, description, is_recurring, recurring_interval)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        INSERT INTO transactions (
+            user_id, group_id, paid_by, type, amount, category_id, transaction_date, description,
+            is_recurring, recurring_interval, next_occurrence
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING
             id,
             user_id AS "userId",
@@ -187,7 +237,7 @@ export const createGroupTransaction = async (
             recurring_interval AS "recurringInterval"
     `;
 
-    const result = await pool.query(query, [userId, groupId, paidBy, type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval]);
+    const result = await pool.query(query, [userId, groupId, paidBy, type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval, nextOccurrence]);
     return result.rows[0];
 }
 
@@ -297,19 +347,22 @@ export const updateGroupTransaction = async (
     isRecurring: boolean,
     recurringInterval: string | null
 ): Promise<Transaction | null> => {
+    const nextOccurrence = isRecurring && recurringInterval
+        ? calculateNextOccurrence(transactionDate, recurringInterval)
+        : null;
     //captures the pre-update amount (via the `old` CTE, which sees the same snapshot as the rest of this
     //statement) so the splits can be rescaled by the same ratio the total changed by. Keeps whatever shape
     //the splits had - equal or custom - without needing the caller to resubmit a new split breakdown.
     const query = `
         WITH old AS (
-            SELECT amount FROM transactions WHERE id = $8 AND group_id = $9
+            SELECT amount FROM transactions WHERE id = $9 AND group_id = $10
         ),
         updated AS (
             UPDATE transactions
             SET type = $1, amount = $2, category_id = $3, transaction_date = $4,
                 description = $5, is_recurring = $6, recurring_interval = $7,
-                updated_at = now()
-            WHERE id = $8 AND group_id = $9
+                next_occurrence = $8, updated_at = now()
+            WHERE id = $9 AND group_id = $10
             RETURNING
                 id, user_id, group_id, paid_by, category_id, type, amount,
                 transaction_date, description, is_recurring, recurring_interval
@@ -318,7 +371,7 @@ export const updateGroupTransaction = async (
             UPDATE transaction_splits
             SET amount = ROUND(transaction_splits.amount * ($2::numeric / old.amount), 2)
             FROM old
-            WHERE transaction_splits.transaction_id = $8
+            WHERE transaction_splits.transaction_id = $9
         )
         SELECT
             updated.id,
@@ -335,7 +388,7 @@ export const updateGroupTransaction = async (
         FROM updated
     `;
 
-    const result = await pool.query(query, [type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval, transactionId, groupId]);
+    const result = await pool.query(query, [type, amount, categoryId, transactionDate, description, isRecurring, recurringInterval, nextOccurrence, transactionId, groupId]);
     return result.rows[0] || null;
 }
 
@@ -460,4 +513,72 @@ export const getGroupSettlementsBetweenUsers = async (groupId: string, userA: st
     `;
     const result = await pool.query(query, [groupId, userA, userB]);
     return result.rows;
+}
+
+/**
+ * Used to find which recurring transactions belonging to the user/owner are due to be automatically created.
+ */
+export const findDueRecurringTransactions = async (ownerId: string): Promise<DueRecurringTemplate[]> => {
+    
+    const query = `
+        SELECT
+            id,
+            user_id AS "userId",
+            group_id AS "groupId",
+            paid_by AS "paidBy",
+            category_id AS "categoryId",
+            type,
+            amount,
+            description,
+            recurring_interval AS "recurringInterval",
+            next_occurrence AS "nextOccurrence"
+        FROM transactions
+        WHERE is_recurring = true
+        AND next_occurrence <= CURRENT_DATE
+        AND (
+            (group_id IS NULL AND user_id = $1)
+            OR (group_id IS NOT NULL AND paid_by = $1)
+        )
+    `;
+    
+    const result = await pool.query(query, [ownerId]);
+
+    //return transactions with nextOccurrence as an ISO date string (YYYY-MM-DD) instead of a Date object
+    return result.rows.map(row => ({
+        ...row,
+        nextOccurrence: row.nextOccurrence.toISOString().split('T')[0],
+    }));
+}
+
+//crates new transactions for all due recurring transactions for a given user/owner. 
+//Returns the number of transactions created.
+export const processRecurringTransactionsForOwner = async (ownerId: string): Promise<number> => {
+    const dueTemplates = await findDueRecurringTransactions(ownerId);
+    const today = todayISODate();
+    let createdCount = 0;
+
+    for (const template of dueTemplates) {
+        let occurrenceDate = template.nextOccurrence;
+
+        //Create one transaction per missed interval
+        while (occurrenceDate <= today) {
+            await pool.query(
+                `INSERT INTO transactions
+                    (user_id, group_id, paid_by, type, amount, category_id, transaction_date, description, is_recurring, recurring_interval)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9)`,
+                [template.userId, template.groupId, template.paidBy, template.type, template.amount, template.categoryId, occurrenceDate, template.description, template.recurringInterval]
+            );
+            createdCount++;
+            //set the next occurence for the newly created transaction based on the original's recurring interval. 
+            occurrenceDate = calculateNextOccurrence(occurrenceDate, template.recurringInterval);
+        }
+
+        //Update the next_occurance now to avoid processing the same transaction twice.
+        await pool.query(
+            `UPDATE transactions SET next_occurrence = $1 WHERE id = $2`,
+            [occurrenceDate, template.id]
+        );
+    }
+
+    return createdCount;
 }
