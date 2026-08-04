@@ -13,6 +13,7 @@ export function setAccessToken(token: string | null) {
   accessToken = token
 }
 
+// REQUEST interceptor: attaches the JWT token and preserves browser-managed multipart headers.
 api.interceptors.request.use(
   (config) => {
     const headers = config.headers ?? {}
@@ -34,8 +35,10 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
+// try a silent refresh before giving up on 401
 let refreshPromise: Promise<string | null> | null = null
 
+// RESPONSE interceptor: if token expires, retry once after refresh before redirecting.
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
