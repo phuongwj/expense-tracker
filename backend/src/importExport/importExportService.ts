@@ -118,11 +118,16 @@ export const parseCsvText = (csvText: string) => {
 
   const rows = lines.slice(1).map((line, index) => {
     const values = parseCsvLine(line);
-    const row = REQUIRED_HEADERS.reduce<Record<string, string>>((acc, header) => {
-      const headerIndex = headers.indexOf(header);
-      acc[header] = values[headerIndex] ?? "";
-      return acc;
-    }, {});
+    const getValue = (header: (typeof REQUIRED_HEADERS)[number]) =>
+      values[headers.indexOf(header)] ?? "";
+
+    const row: ImportRowInput = {
+      date: getValue("date"),
+      description: getValue("description"),
+      amount: getValue("amount"),
+      type: getValue("type"),
+      category: getValue("category"),
+    };
 
     return {
       rowNumber: index + 2,
