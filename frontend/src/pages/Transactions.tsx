@@ -57,13 +57,13 @@ export default function Transactions() {
   }, [])
 
   const filtered = items.filter((t) => {
-  if (query && t.description && !t.description.toLowerCase().includes(query.toLowerCase())) return false
-  if (selectedMonth !== 'all' && monthKey(t.transactionDate) !== selectedMonth) return false
-  if (tab === 'Expenses') return t.type === 'expense'
-  if (tab === 'Income') return t.type === 'income'
-  if (tab === 'Recurring') return t.isRecurring
-  return true
-})
+    if (query && t.description && !t.description.toLowerCase().includes(query.toLowerCase())) return false
+    if (selectedMonth !== 'all' && monthKey(t.transactionDate) !== selectedMonth) return false
+    if (tab === 'Expenses') return t.type === 'expense'
+    if (tab === 'Income') return t.type === 'income'
+    if (tab === 'Recurring') return !!t.recurringInterval
+    return true
+  })
 
   const income = items
   .filter((t) => t.type === 'income')
@@ -207,7 +207,7 @@ export default function Transactions() {
               <tr key={t.id}>
                 <td className="px-6 py-3 font-medium text-gray-900">
                   {t.description}
-                  {t.isRecurring && (
+                  {!!t.recurringInterval && (
                     <span className="ml-2 text-[10px] font-semibold bg-green-50 text-green-700 rounded px-1.5 py-0.5">
                       ↻ Recurring
                     </span>

@@ -11,6 +11,7 @@ import {
     updateGroupTransaction,
     deleteGroupTransaction,
     insertTransactionSplits,
+    processRecurringTransactionsForOwner,
 } from "./transactionRepository.ts";
 
 import { CreateTransactionInput, GetTransactionsInput, UpdateTransactionInput, CreateGroupTransactionInput } from "./transactionSchemas.ts";
@@ -46,6 +47,8 @@ export const createPersonal = asyncHandler (async (req: Request<{}, {}, CreateTr
 export const getPersonal = asyncHandler (async (req: Request, res: Response) => {
     const userId = req.userId!;
     const filters = (req as any).validatedQuery as GetTransactionsInput;
+
+    await processRecurringTransactionsForOwner(userId);
 
     const transactions = await getPersonalTransactions(userId, filters);
 
@@ -163,6 +166,8 @@ export const getGroup = asyncHandler (async (
 ) => {
     const groupId = req.params.groupId;
     const filters = (req as any).validatedQuery;
+
+    await processRecurringTransactionsForOwner(req.userId!);
 
     const transactions = await getGroupTransactions(groupId, filters);
 
