@@ -67,11 +67,11 @@ export default function Transactions() {
     return true
   })
 
-  const income = items
-  .filter((t) => t.type === 'income')
-  .reduce((sum, t) => sum + Number(t.amount), 0)
+  const income = filtered
+    .filter((t) => t.type === 'income')
+    .reduce((sum, t) => sum + Number(t.amount), 0)
 
-  const expenses = items
+  const expenses = filtered
     .filter((t) => t.type === 'expense')
     .reduce((sum, t) => sum + Number(t.amount), 0)
 
