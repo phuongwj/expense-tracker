@@ -7,6 +7,7 @@ import { getPersonalTransactions, getGroupTransactions, type Transaction } from 
 import { getGroups, getGroup } from '../services/groupService'
 import { getGlobalBalances, getGroupBalances, type Balance } from '../services/transactions'
 import type { GroupSummary, GroupDetailMember } from '@expense-tracker/shared/groups'
+import { getErrorMessage, SUPPORT_EMAIL } from '../utils/errors'
 
 export default function Dashboard() {
   const [addOpen, setAddOpen] = useState(false)
@@ -16,58 +17,68 @@ export default function Dashboard() {
   const [userNames, setUserNames] = useState<Map<string, string>>(new Map())
   const [userGroups, setUserGroups] = useState<GroupSummary[]>([])
   const [groupMembers, setGroupMembers] = useState<GroupDetailMember[]>([])
+  const [error, setError] = useState<string | null>(null)
 
   async function loadTransactions() {
-    if (view === 'personal') {
-      const data = await getPersonalTransactions()
-      setTransactions(data)
-    } else {
-      const data = await getGroupTransactions(view)
-      setTransactions(
-        data.map((t: Transaction) => ({ ...t, amount: Number(t.amount) }))
-      )
+    try {
+      if (view === 'personal') {
+        const data = await getPersonalTransactions()
+        setTransactions(data)
+      } else {
+        const data = await getGroupTransactions(view)
+        setTransactions(
+          data.map((t: Transaction) => ({ ...t, amount: Number(t.amount) }))
+        )
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, `Unable to load transactions. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
     }
   }
 
   //get the net balances for the user. if personal view: all groups, if group view: that view only
   async function loadGlobalBalances() {
-    if (view === 'personal') {
-      const [balancesRes, groups] = await Promise.all([
-        getGlobalBalances(),
-        getGroups(),
-      ])
-      setBalances(balancesRes.balances)
+    try {
+      if (view === 'personal') {
+        const [balancesRes, groups] = await Promise.all([
+          getGlobalBalances(),
+          getGroups(),
+        ])
+        setBalances(balancesRes.balances)
 
-      const groupDetails = await Promise.all(
-        groups.map((g) => getGroup(g.id))
-      )
+        const groupDetails = await Promise.all(
+          groups.map((g) => getGroup(g.id))
+        )
 
-      const nameMap = new Map<string, string>()
-      for (const detail of groupDetails) {
-        for (const m of detail.members) {
+        const nameMap = new Map<string, string>()
+        for (const detail of groupDetails) {
+          for (const m of detail.members) {
+            nameMap.set(m.userId, `${m.firstName} ${m.lastName}`)
+          }
+        }
+        setUserNames(nameMap)
+        setGroupMembers([])
+      } else {
+        const [balRes, groupDetail] = await Promise.all([
+          getGroupBalances(view),
+          getGroup(view),
+        ])
+        setBalances(balRes.balances)
+        setGroupMembers(groupDetail.members)
+
+        const nameMap = new Map<string, string>()
+        for (const m of groupDetail.members) {
           nameMap.set(m.userId, `${m.firstName} ${m.lastName}`)
         }
+        setUserNames(nameMap)
       }
-      setUserNames(nameMap)
-      setGroupMembers([])
-    } else {
-      const [balRes, groupDetail] = await Promise.all([
-        getGroupBalances(view),
-        getGroup(view),
-      ])
-      setBalances(balRes.balances)
-      setGroupMembers(groupDetail.members)
-
-      const nameMap = new Map<string, string>()
-      for (const m of groupDetail.members) {
-        nameMap.set(m.userId, `${m.firstName} ${m.lastName}`)
-      }
-      setUserNames(nameMap)
+    } catch (err) {
+      setError(getErrorMessage(err, `Unable to load balances. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
     }
   }
 
 
     useEffect(() => {
+      setError(null)
       loadTransactions()
       loadGlobalBalances()
     }, [view])
@@ -135,6 +146,7 @@ export default function Dashboard() {
         </>
       }
     >
+    {error && <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 p-6 text-sm text-red-700">{error}</div>}
     <div className={`grid grid-cols-1 ${view === 'personal' ? 'sm:grid-cols-3' : ''} gap-4 mb-6`}>
       {view === 'personal' && (
         <Card

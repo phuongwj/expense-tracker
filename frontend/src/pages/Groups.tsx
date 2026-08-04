@@ -16,12 +16,8 @@ export default function Groups() {
     setIsLoading(true)
     getGroups()
       .then(setGroups)
-      .catch((err: any) => {
-        if (err?.response?.status === 400) {
-          setError("No groups to display.")
-        } else {
-          setError('Unable to load groups.')
-        }
+      .catch((err) => {
+        setError(getErrorMessage(err, `Unable to load your groups. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
       })
       .finally(() => setIsLoading(false))
   }, [])
