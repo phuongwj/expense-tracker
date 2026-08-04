@@ -560,16 +560,34 @@ export const processRecurringTransactionsForOwner = async (ownerId: string): Pro
     for (const template of dueTemplates) {
         let occurrenceDate = template.nextOccurrence;
 
+        //For group transactions, fetch the original template's splits once so every
+        //generated occurrence can be split the same way (recurring transactions repeat
+        //the same amount each cycle, so the same split amounts apply to each occurrence).
+        let templateSplits: { userId: string; amount: number }[] = [];
+        if (template.groupId) {
+            const splitsResult = await pool.query(
+                `SELECT user_id AS "userId", amount FROM transaction_splits WHERE transaction_id = $1`,
+                [template.id]
+            );
+            templateSplits = splitsResult.rows;
+        }
+
         //Create one transaction per missed interval
         while (occurrenceDate <= today) {
-            await pool.query(
+            const insertResult = await pool.query(
                 `INSERT INTO transactions
                     (user_id, group_id, paid_by, type, amount, category_id, transaction_date, description, is_recurring, recurring_interval)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9)`,
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9)
+                RETURNING id`,
                 [template.userId, template.groupId, template.paidBy, template.type, template.amount, template.categoryId, occurrenceDate, template.description, template.recurringInterval]
             );
             createdCount++;
-            //set the next occurence for the newly created transaction based on the original's recurring interval. 
+
+            if (templateSplits.length > 0) {
+                await insertTransactionSplits(insertResult.rows[0].id, templateSplits);
+            }
+
+            //set the next occurence for the newly created transaction based on the original's recurring interval.
             occurrenceDate = calculateNextOccurrence(occurrenceDate, template.recurringInterval);
         }
 

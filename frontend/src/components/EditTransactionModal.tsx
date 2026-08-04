@@ -35,7 +35,7 @@ export default function EditTransactionModal({
     setAmount(String(transaction.amount))
     setDate(transaction.transactionDate.slice(0, 10))
     setDescription(transaction.description ?? '')
-    setRecurring(transaction.isRecurring)
+    setRecurring(!!transaction.recurringInterval)
     setFormError(null)
 
     if (transaction.recurringInterval === 'weekly' ||
