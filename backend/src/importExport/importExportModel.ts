@@ -22,11 +22,15 @@ export interface InvalidImportRow {
   errors: string[];
 }
 
-export interface SavedMockTransaction extends NormalizedImportRow {
+export interface SavedImportedTransaction extends NormalizedImportRow {
   id: string;
-  source: "csv_import";
+  source: string;
   createdAt: string;
 }
+
+export interface ExportPreviewRow extends SavedImportedTransaction {}
+
+export type SavedMockTransaction = SavedImportedTransaction;
 
 export interface ExportPreviewSummary {
   rowCount: number;

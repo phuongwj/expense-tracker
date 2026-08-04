@@ -210,6 +210,100 @@ node_modules/@expense-tracker/shared → ../../packages/shared
 
 See [API_DOCS.md](API_DOCS.md) for full request/response docs for all endpoints.
 
+## Core Feature 3: Import / Export
+
+The current Core Feature 3 flow is wired to real backend endpoints from the frontend UI.
+
+### Implemented frontend-to-backend flow
+
+- `GET /import-csv` opens the CSV import page
+- `POST /api/import/preview` generates a real backend preview from uploaded CSV content
+- `POST /api/import/confirm` confirms selected valid rows and saves them to the authenticated user's PostgreSQL personal transactions
+- `GET /export` opens the export page
+- `POST /api/export/preview` generates a real backend export preview from the authenticated user's PostgreSQL personal transactions
+- `GET /api/export/csv` downloads a CSV file built from the authenticated user's PostgreSQL personal transactions
+
+### Current limitations
+
+- Import/export currently supports personal transactions only
+- Group import/export is not implemented
+- PDF export is not implemented on this branch
+- Imported rows create or reuse categories by name for the authenticated user
+- Export responses include a synthetic `source` field for frontend compatibility; transaction provenance is not yet persisted separately
+- PDF export is not implemented on this branch
+
+### How to test Core Feature 3
+
+#### 1. Start the backend
+
+From `backend/`:
+
+```bash
+npm install
+npm start
+```
+
+#### 2. Start the frontend
+
+From `frontend/`:
+
+```bash
+npm install
+npm run dev
+```
+
+#### 3. Test import preview
+
+1. Open the app and log in
+2. Go to `Transactions -> Import CSV`
+3. Upload a `.csv` file with required columns:
+   - `date`
+   - `description`
+   - `amount`
+   - `type`
+   - `category`
+4. The page calls `POST /api/import/preview`
+5. The UI should show:
+   - total row count
+   - valid rows
+   - invalid rows
+   - validation errors for rejected rows
+
+#### 4. Test import confirm
+
+1. On the preview screen, leave valid rows selected or uncheck any rows you do not want to import
+2. Click `Import ... rows`
+3. The page calls `POST /api/import/confirm`
+4. The UI should show saved/skipped counts
+5. Imported rows should now exist in the PostgreSQL `transactions` table for the logged-in user
+
+#### 5. Test export preview
+
+1. Go to `Transactions -> Export`
+2. Use the available type, category, and date filters
+3. Click `Refresh preview`
+4. The page calls `POST /api/export/preview`
+5. The UI should show:
+   - row count
+   - total income
+   - total expenses
+   - net amount
+   - preview rows from the authenticated user's PostgreSQL personal transactions
+
+#### 6. Test CSV download
+
+1. On the Export page, keep the format set to `CSV`
+2. Click `Download CSV`
+3. The page calls `GET /api/export/csv`
+4. A CSV file should download with real PostgreSQL-backed personal transaction rows
+
+### Notes for teammates
+
+- The import/export frontend now calls real backend endpoints instead of frontend mock rows
+- Import confirm, export preview, and CSV download are now PostgreSQL-backed for authenticated personal transactions
+- Import preview still does validation only and does not write to the database until confirm
+- Group import/export and PDF export still need separate implementation
+
 
 ## Local Setup For AI/OCR Testing
 
