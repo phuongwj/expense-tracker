@@ -1,17 +1,26 @@
-import crypto from "crypto";
-
 import {
   ExportPreviewInput,
   ImportConfirmInput,
 } from "./importExportSchemas.ts";
-import { addMockTransactions, getMockTransactions } from "./importExportMockStore.ts";
 import {
+  createCategory,
+  getUserCategories,
+} from "../categories/categoryRepository.ts";
+import {
+  ExportPreviewRow,
   ExportPreviewSummary,
   ImportRowInput,
   InvalidImportRow,
   NormalizedImportRow,
-  SavedMockTransaction,
+  SavedImportedTransaction,
 } from "./importExportModel.ts";
+import {
+  getAllGroupTransactionsForExport,
+  getAllPersonalTransactionsForExport,
+  getGroupTransactionsForExport,
+  getPersonalTransactionsForExport,
+  insertImportedPersonalTransaction,
+} from "./importExportRepository.ts";
 
 const REQUIRED_HEADERS = [
   "date",
@@ -109,11 +118,16 @@ export const parseCsvText = (csvText: string) => {
 
   const rows = lines.slice(1).map((line, index) => {
     const values = parseCsvLine(line);
-    const row = REQUIRED_HEADERS.reduce<Record<string, string>>((acc, header) => {
-      const headerIndex = headers.indexOf(header);
-      acc[header] = values[headerIndex] ?? "";
-      return acc;
-    }, {});
+    const getValue = (header: (typeof REQUIRED_HEADERS)[number]) =>
+      values[headers.indexOf(header)] ?? "";
+
+    const row: ImportRowInput = {
+      date: getValue("date"),
+      description: getValue("description"),
+      amount: getValue("amount"),
+      type: getValue("type"),
+      category: getValue("category"),
+    };
 
     return {
       rowNumber: index + 2,
@@ -214,28 +228,69 @@ export const buildImportPreview = (csvText: string) => {
   };
 };
 
-export const confirmImportRows = (input: ImportConfirmInput) => {
-  const savedTransactions: SavedMockTransaction[] = [];
-  const skippedRows: InvalidImportRow[] = [];
+const findCategoryIdByName = (
+  categories: Array<{ id: string; name: string }>,
+  categoryName: string
+): string | null => {
+  const match = categories.find(
+    (category) =>
+      category.name.trim().toLowerCase() === categoryName.trim().toLowerCase()
+  );
 
-  input.rows.forEach((row, index) => {
+  return match?.id ?? null;
+};
+
+const getOrCreateCategoryId = async (
+  userId: string,
+  categoryName: string,
+  categories: Array<{ id: string; name: string; userId: string }>
+): Promise<string | null> => {
+  const existingCategoryId = findCategoryIdByName(categories, categoryName);
+  if (existingCategoryId) {
+    return existingCategoryId;
+  }
+
+  try {
+    const category = await createCategory(categoryName, userId);
+    categories.push(category);
+    return category.id;
+  } catch {
+    const refreshedCategories = await getUserCategories(userId);
+    categories.splice(0, categories.length, ...refreshedCategories);
+    return findCategoryIdByName(categories, categoryName);
+  }
+};
+
+export const confirmImportRows = async (
+  userId: string,
+  input: ImportConfirmInput
+) => {
+  const savedTransactions: SavedImportedTransaction[] = [];
+  const skippedRows: InvalidImportRow[] = [];
+  const categories = await getUserCategories(userId);
+
+  for (const [index, row] of input.rows.entries()) {
     const result = validateImportRow(row, index + 1);
 
     if (result.validRow) {
-      savedTransactions.push({
-        id: crypto.randomUUID(),
-        ...result.validRow,
-        source: "csv_import",
-        createdAt: new Date().toISOString(),
-      });
+      const categoryId = await getOrCreateCategoryId(
+        userId,
+        result.validRow.category,
+        categories
+      );
+
+      const savedTransaction = await insertImportedPersonalTransaction(
+        userId,
+        result.validRow,
+        categoryId
+      );
+      savedTransactions.push(savedTransaction);
     }
 
     if (result.invalidRow) {
       skippedRows.push(result.invalidRow);
     }
-  });
-
-  addMockTransactions(savedTransactions);
+  }
 
   return {
     savedCount: savedTransactions.length,
@@ -245,47 +300,11 @@ export const confirmImportRows = (input: ImportConfirmInput) => {
   };
 };
 
-const isWithinDateRange = (
-  value: string,
-  startDate?: string,
-  endDate?: string
-): boolean => {
-  const date = normalizeDate(value);
-  if (startDate && date < normalizeDate(startDate)) {
-    return false;
-  }
-  if (endDate && date > normalizeDate(endDate)) {
-    return false;
-  }
-  return true;
-};
-
-export const filterMockTransactions = (filters: ExportPreviewInput) => {
-  return getMockTransactions().filter((row) => {
-    if (filters.type && filters.type !== "all" && row.type !== filters.type) {
-      return false;
-    }
-
-    if (
-      filters.category &&
-      row.category.toLowerCase() !== filters.category.toLowerCase()
-    ) {
-      return false;
-    }
-
-    if (
-      (filters.startDate || filters.endDate) &&
-      !isWithinDateRange(row.date, filters.startDate, filters.endDate)
-    ) {
-      return false;
-    }
-
-    return true;
-  });
-};
-
-export const buildExportPreview = (filters: ExportPreviewInput) => {
-  const rows = filterMockTransactions(filters);
+export const buildExportPreview = async (
+  userId: string,
+  filters: ExportPreviewInput
+) => {
+  const rows = await getPersonalTransactionsForExport(userId, filters);
   const totalIncome = rows
     .filter((row) => row.type === "income")
     .reduce((sum, row) => sum + row.amount, 0);
@@ -314,8 +333,43 @@ const escapeCsvValue = (value: string | number): string => {
   return stringValue;
 };
 
-export const buildExportCsv = () => {
-  const rows = getMockTransactions();
+export const buildGroupExportPreview = async (
+  groupId: string,
+  filters: ExportPreviewInput
+) => {
+  const rows = await getGroupTransactionsForExport(groupId, filters);
+  const totalIncome = rows
+    .filter((row) => row.type === "income")
+    .reduce((sum, row) => sum + row.amount, 0);
+  const totalExpenses = rows
+    .filter((row) => row.type === "expense")
+    .reduce((sum, row) => sum + row.amount, 0);
+
+  const summary: ExportPreviewSummary = {
+    rowCount: rows.length,
+    totalIncome,
+    totalExpenses,
+    netAmount: totalIncome - totalExpenses,
+  };
+
+  return {
+    summary,
+    rows,
+  };
+};
+
+export const buildGroupExportCsv = async (groupId: string) => {
+  const rows = await getAllGroupTransactionsForExport(groupId);
+  const headerRow = EXPORT_HEADERS.join(",");
+  const csvRows = rows.map((row) =>
+    EXPORT_HEADERS.map((header) => escapeCsvValue(row[header])).join(",")
+  );
+
+  return [headerRow, ...csvRows].join("\n");
+};
+
+export const buildExportCsv = async (userId: string) => {
+  const rows = await getAllPersonalTransactionsForExport(userId);
   const headerRow = EXPORT_HEADERS.join(",");
   const csvRows = rows.map((row) =>
     EXPORT_HEADERS.map((header) => escapeCsvValue(row[header])).join(",")
