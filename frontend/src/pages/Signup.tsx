@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useNavigate } from 'react-router-dom'
@@ -16,6 +16,16 @@ export default function Signup() {
   const { login } = useAuth()
   const [apiError, setApiError]         = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (window.location.hostname !== '127.0.0.1') {
+      return
+    }
+
+    const redirectUrl = new URL(window.location.href)
+    redirectUrl.hostname = 'localhost'
+    window.location.replace(redirectUrl.toString())
+  }, [])
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(signupSchema),

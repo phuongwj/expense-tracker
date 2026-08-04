@@ -6,7 +6,7 @@ import api from '../services/api'
 const steps = [
   { n: 1, title: 'Upload', sub: 'CSV file of your transactions' },
   { n: 2, title: 'Preview & review', sub: 'Check valid rows and any errors' },
-  { n: 3, title: 'Import', sub: 'Rows are saved in the backend mock store' },
+  { n: 3, title: 'Import', sub: 'Rows are saved to your transaction history' },
 ]
 
 type TransactionType = 'income' | 'expense'
@@ -122,6 +122,7 @@ export default function ImportCsv() {
   const [rows, setRows] = useState<ReviewedRow[]>([])
   const [savedCount, setSavedCount] = useState(0)
   const [skippedCount, setSkippedCount] = useState(0)
+  const [importCompleted, setImportCompleted] = useState(false)
 
   const handleUpload = async (file: File | null) => {
     if (!file) {
@@ -134,6 +135,7 @@ export default function ImportCsv() {
     setImportError('')
     setImportSuccess('')
     setIsPreviewLoading(true)
+    setImportCompleted(false)
 
     try {
       const csvText = await file.text()
@@ -146,6 +148,7 @@ export default function ImportCsv() {
       setUploaded(true)
       setSavedCount(0)
       setSkippedCount(0)
+      setImportCompleted(false)
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { error?: string; message?: string } } }
       setPreviewError(
@@ -169,6 +172,7 @@ export default function ImportCsv() {
     setRows([])
     setSavedCount(0)
     setSkippedCount(0)
+    setImportCompleted(false)
   }
 
   const toggleRow = (id: string) => {
@@ -215,6 +219,7 @@ export default function ImportCsv() {
 
       setSavedCount(response.data.savedCount)
       setSkippedCount(response.data.skippedCount)
+      setImportCompleted(true)
       setImportSuccess(
         `Import complete. Saved ${response.data.savedCount} row${
           response.data.savedCount === 1 ? '' : 's'
@@ -315,10 +320,10 @@ export default function ImportCsv() {
         <button onClick={resetFlow} className="hover:underline">
           {'<-'} Re-upload
         </button>{' '}
-        / <span className="text-gray-700 font-medium">Preview & confirm</span>
+        / <span className="text-gray-700 font-medium">{importCompleted ? 'Import complete' : 'Preview & confirm'}</span>
       </div>
 
-      <StepBar current={2} />
+      <StepBar current={importCompleted ? 3 : 2} />
 
       {importError && (
         <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -346,6 +351,37 @@ export default function ImportCsv() {
           <SummaryCard label="Invalid rows" value={String(preview.summary.invalidRows)} />
         </div>
       </div>
+
+      {importCompleted && (
+        <div className="bg-green-50 border border-green-200 rounded-2xl p-5 mb-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-semibold text-green-900">Import complete</h2>
+              <p className="text-sm text-green-700 mt-1">
+                Your reviewed rows were saved to your transaction history.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => navigate('/export')}
+                className="h-10 px-5 rounded-xl bg-[#3D6B4F] text-white text-sm font-semibold hover:bg-[#2D5240]"
+              >
+                Go to Export
+              </button>
+              <button
+                onClick={resetFlow}
+                className="h-10 px-5 rounded-xl border border-green-200 bg-white text-sm font-medium text-green-800 hover:bg-green-100"
+              >
+                Upload another CSV
+              </button>
+            </div>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-4 mt-4">
+            <SummaryCard label="Saved rows" value={String(savedCount)} />
+            <SummaryCard label="Skipped rows" value={String(skippedCount)} />
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-6">
         <div className="px-5 py-4 border-b border-gray-100">
@@ -475,10 +511,14 @@ export default function ImportCsv() {
           </button>
           <button
             onClick={() => void handleConfirmImport()}
-            disabled={isImporting || includedCount === 0}
+            disabled={isImporting || includedCount === 0 || importCompleted}
             className="h-11 px-6 rounded-xl bg-[#3D6B4F] text-white text-sm font-semibold hover:bg-[#2D5240] disabled:opacity-50"
           >
-            {isImporting ? 'Importing...' : `Import ${includedCount} row${includedCount === 1 ? '' : 's'}`}
+            {isImporting
+              ? 'Importing...'
+              : importCompleted
+                ? 'Import completed'
+                : `Import ${includedCount} row${includedCount === 1 ? '' : 's'}`}
           </button>
         </div>
       </div>

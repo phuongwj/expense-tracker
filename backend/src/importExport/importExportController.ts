@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { asyncHandler } from "../middleware/asyncHandler.ts";
 
 import {
   buildExportCsv,
@@ -23,10 +24,7 @@ const isCsvFile = (file: Express.Multer.File): boolean => {
   );
 };
 
-export const previewImport = (
-  req: Request,
-  res: Response
-) => {
+export const previewImport = asyncHandler(async (req: Request, res: Response) => {
   try {
     const file = req.file;
     const csvTextFromBody =
@@ -58,22 +56,22 @@ export const previewImport = (
           : "Unable to generate import preview.",
     });
   }
-};
+});
 
-export const confirmImport = (
+export const confirmImport = asyncHandler(async (
   req: Request<{}, {}, ImportConfirmInput>,
   res: Response
 ) => {
-  const result = confirmImportRows(req.body);
+  const result = await confirmImportRows(req.userId!, req.body);
   return res.status(200).json(result);
-};
+});
 
-export const previewExport = (
+export const previewExport = asyncHandler(async (
   req: Request<{}, {}, ExportPreviewInput>,
   res: Response
 ) => {
   try {
-    const result = buildExportPreview(req.body);
+    const result = await buildExportPreview(req.userId!, req.body);
     return res.status(200).json(result);
   } catch (error) {
     return res.status(400).json({
@@ -83,15 +81,15 @@ export const previewExport = (
           : "Unable to generate export preview.",
     });
   }
-};
+});
 
-export const exportCsv = (_req: Request, res: Response) => {
-  const csvContent = buildExportCsv();
+export const exportCsv = asyncHandler(async (req: Request, res: Response) => {
+  const csvContent = await buildExportCsv(req.userId!);
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader(
     "Content-Disposition",
-    'attachment; filename="mock-transactions-export.csv"'
+    'attachment; filename="personal-transactions-export.csv"'
   );
 
   return res.status(200).send(csvContent);
-};
+});

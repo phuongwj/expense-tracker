@@ -46,7 +46,6 @@ export default function ExportData() {
   const [category, setCategory] = useState('All categories')
   const [from, setFrom] = useState('2026-05-01')
   const [to, setTo] = useState('2026-05-31')
-  const [format, setFormat] = useState<'CSV' | 'PDF'>('CSV')
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [previewError, setPreviewError] = useState('')
@@ -90,12 +89,6 @@ export default function ExportData() {
   }, [])
 
   const handleDownloadCsv = async () => {
-    if (format !== 'CSV') {
-      setDownloadError('PDF export is not implemented on this branch yet. Use CSV for this PR.')
-      setDownloadSuccess('')
-      return
-    }
-
     setIsDownloading(true)
     setDownloadError('')
     setDownloadSuccess('')
@@ -109,7 +102,7 @@ export default function ExportData() {
       const downloadUrl = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = downloadUrl
-      link.download = 'mock-transactions-export.csv'
+      link.download = 'personal-transactions-export.csv'
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -202,29 +195,18 @@ export default function ExportData() {
 
         <div className="mb-4">
           <label className="label">Export format</label>
-          <div className="grid grid-cols-2 gap-2 max-w-sm">
-            <button
-              onClick={() => setFormat('CSV')}
-              className={`h-10 rounded-xl text-sm font-semibold border ${
-                format === 'CSV' ? 'bg-[#EDF4EE] border-[#3D6B4F] text-[#2D5240]' : 'border-gray-200 text-gray-500'
-              }`}
-            >
+          <div className="max-w-sm">
+            <div className="h-10 rounded-xl border border-[#3D6B4F] bg-[#EDF4EE] text-[#2D5240] text-sm font-semibold flex items-center justify-center">
               CSV
-            </button>
-            <button
-              onClick={() => setFormat('PDF')}
-              className={`h-10 rounded-xl text-sm font-semibold border ${
-                format === 'PDF' ? 'bg-[#EDF4EE] border-[#3D6B4F] text-[#2D5240]' : 'border-gray-200 text-gray-500'
-              }`}
-            >
-              PDF
-            </button>
+            </div>
           </div>
-          <div className="text-xs text-gray-400 mt-2">This branch supports CSV download only. PDF remains pending.</div>
+          <div className="text-xs text-gray-400 mt-2">
+            CSV export is currently supported. PDF export is planned for a future update.
+          </div>
         </div>
 
         <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-          Current backend preview applies type, category, and date filters against the backend import/export mock store. The view selector is kept for UI continuity but does not change backend results on this branch.
+          Export preview and CSV download read from your saved transaction history in PostgreSQL. The view selector is kept for UI continuity but does not change backend results on this page yet.
         </div>
       </div>
 
@@ -267,7 +249,7 @@ export default function ExportData() {
               {preview.rows.length === 0 && (
                 <tr>
                   <td colSpan={4} className="px-4 py-6 text-center text-gray-400">
-                    No imported rows match these filters yet.
+                    No saved transactions match these filters yet.
                   </td>
                 </tr>
               )}

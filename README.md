@@ -218,19 +218,18 @@ The current Core Feature 3 flow is wired to real backend endpoints from the fron
 
 - `GET /import-csv` opens the CSV import page
 - `POST /api/import/preview` generates a real backend preview from uploaded CSV content
-- `POST /api/import/confirm` confirms selected valid rows and stores them in the backend import/export mock store
+- `POST /api/import/confirm` confirms selected valid rows and saves them to the authenticated user's PostgreSQL personal transactions
 - `GET /export` opens the export page
-- `POST /api/export/preview` generates a real backend export preview from the backend mock store
-- `GET /api/export/csv` downloads a CSV file built from the backend mock store
+- `POST /api/export/preview` generates a real backend export preview from the authenticated user's PostgreSQL personal transactions
+- `GET /api/export/csv` downloads a CSV file built from the authenticated user's PostgreSQL personal transactions
 
-### Important limitation
+### Current limitations
 
-This branch uses the existing backend mock-backed import/export module.
-
-- Imported rows are stored in memory only
-- They are not written to the real PostgreSQL `transactions` table yet
-- Export preview and CSV download read from that in-memory import/export store
-- Data is reset when the backend server restarts
+- Import/export currently supports personal transactions only
+- Group import/export is not implemented
+- PDF export is not implemented on this branch
+- Imported rows create or reuse categories by name for the authenticated user
+- Export responses include a synthetic `source` field for frontend compatibility; transaction provenance is not yet persisted separately
 - PDF export is not implemented on this branch
 
 ### How to test Core Feature 3
@@ -276,6 +275,7 @@ npm run dev
 2. Click `Import ... rows`
 3. The page calls `POST /api/import/confirm`
 4. The UI should show saved/skipped counts
+5. Imported rows should now exist in the PostgreSQL `transactions` table for the logged-in user
 
 #### 5. Test export preview
 
@@ -288,20 +288,21 @@ npm run dev
    - total income
    - total expenses
    - net amount
-   - preview rows from the backend mock store
+   - preview rows from the authenticated user's PostgreSQL personal transactions
 
 #### 6. Test CSV download
 
 1. On the Export page, keep the format set to `CSV`
 2. Click `Download CSV`
 3. The page calls `GET /api/export/csv`
-4. A file named `mock-transactions-export.csv` should download
+4. A CSV file should download with real PostgreSQL-backed personal transaction rows
 
 ### Notes for teammates
 
 - The import/export frontend now calls real backend endpoints instead of frontend mock rows
-- The backend import/export module is still intentionally mock-backed for this PR
-- If you restart the backend server, previously imported rows used for export preview/download will be cleared
+- Import confirm, export preview, and CSV download are now PostgreSQL-backed for authenticated personal transactions
+- Import preview still does validation only and does not write to the database until confirm
+- Group import/export and PDF export still need separate implementation
 
 
 ## Database migrations
