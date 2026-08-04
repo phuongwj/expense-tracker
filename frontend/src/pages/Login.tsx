@@ -1,39 +1,38 @@
 ﻿import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import api from '../services/api'
+import { getErrorMessage, SUPPORT_EMAIL } from '../utils/errors'
 
-const schema = z.object({
-  email:    z.string().email('Please enter a valid email'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),})
+import * as authService from '../services/authService'
 
-type FormData = z.infer<typeof schema>
+import type { LoginInput } from '@expense-tracker/shared/auth'
+import { loginSchema } from '@expense-tracker/shared/auth'
+
+type FormData = LoginInput
 
 export default function Login() {
   const navigate  = useNavigate()
   const location  = useLocation()
   const { login } = useAuth()
-  const [apiError, setApiError]         = useState('')
+  const [apiError, setApiError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const from = (location.state as { from?: string })?.from ?? '/dashboard'
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(loginSchema),
   })
 
   const onSubmit = async (data: FormData) => {
     setApiError('')
     setIsSubmitting(true)
     try {
-      const res = await api.post('/auth/login', { email: data.email, password: data.password })
-      login(res.data.token, res.data.user)
+      const user = await authService.logIn(data)
+      login(user)
       navigate(from, { replace: true })
-    } catch (err: unknown) {
-      const e = err as { response?: { data?: { message?: string } } }
-      setApiError(e.response?.data?.message ?? 'Incorrect email or password. Please try again.')
+    } catch (err) {
+      setApiError(getErrorMessage(err, `Unable to sign in right now. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
     } finally {
       setIsSubmitting(false)
     }
@@ -46,17 +45,13 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex">
-      <div className="hidden lg:flex w-[420px] shrink-0 bg-[#2D5240] flex-col justify-between p-12">
-        <div className="text-3xl text-white font-bold">Expense Tracker</div>
+      <div className="hidden lg:flex w-[420px] shrink-0 bg-[#2D5240] flex-col justify-center p-12">
+        <div className="text-3xl text-white font-bold mb-20">Expense Tracker</div>
         <div>
           <h1 className="text-4xl font-light text-white leading-tight mb-4">Welcome <strong>back</strong></h1>
           <p className="text-white/60 text-sm leading-relaxed">
             Sign in to view your transactions, check group balances, and see your AI-powered insights.
           </p>
-        </div>
-        <div className="flex gap-10">
-          <div><div className="text-3xl font-semibold text-white">$1,842</div><div className="text-xs text-white/50 mt-1">Your balance</div></div>
-          <div><div className="text-3xl font-semibold text-white">3</div><div className="text-xs text-white/50 mt-1">Active groups</div></div>
         </div>
       </div>
       <div className="flex-1 flex items-center justify-center p-8 bg-[#F2F0EA]">

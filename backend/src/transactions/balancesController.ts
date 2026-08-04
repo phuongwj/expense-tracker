@@ -34,9 +34,13 @@ export const computeNetBalances = (splitRows: BalanceRow[], settlementRows: Bala
 
     //this second loop gets all the amounts owed that were already paid, and then subtracts them from the map
     //so that all that's left are the amounts still owed
+    //only applies to pairs that still have outstanding splits - if every transaction between two users has
+    //been deleted, there's nothing left for a leftover settlement to net against, so skip it rather than
+    //letting it manufacture a balance out of nowhere
     for (const { owes, isOwed, amount } of settlementRows) {
         const otherUser = owes === userId ? isOwed : owes;
-        const existingBalance = balances.get(otherUser) ?? 0;
+        if (!balances.has(otherUser)) continue;
+        const existingBalance = balances.get(otherUser)!;
         balances.set(otherUser, existingBalance - (owes === userId ? Number(amount) : -Number(amount)));
     }
 

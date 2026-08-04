@@ -54,7 +54,17 @@ export const createGroupTransactionSchema = z.object({
         userId: z.string(),
         amount: z.number().positive("Split amount must be greater than zero.")
     })).optional()
-});
+}).refine(
+    (data) => {
+        if (!data.splits || data.splits.length === 0) return true;
+        const splitTotal = data.splits.reduce((sum, s) => sum + s.amount, 0);
+        return Math.abs(splitTotal - data.amount) < 0.01;
+    },
+    {
+        message: "Split amounts must add up to the transaction's total amount.",
+        path: ["splits"],
+    }
+);
 
 
 export type CreateGroupTransactionInput = z.infer<typeof createGroupTransactionSchema>;

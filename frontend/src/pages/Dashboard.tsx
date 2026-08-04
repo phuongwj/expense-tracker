@@ -1,14 +1,124 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import AddTransactionModal from '../components/AddTransactionModal'
-import { transactions, groups } from '../data/mockData'
+import AddGroupExpenseModal from '../components/AddGroupExpenseModal'
+import { getPersonalTransactions, getGroupTransactions, type Transaction } from "../services/transactions";
+import { getGroups, getGroup } from '../services/groupService'
+import { getGlobalBalances, getGroupBalances, type Balance } from '../services/transactions'
+import type { GroupSummary, GroupDetailMember } from '@expense-tracker/shared/groups'
+import { getErrorMessage, SUPPORT_EMAIL } from '../utils/errors'
 
 export default function Dashboard() {
   const [addOpen, setAddOpen] = useState(false)
   const [view, setView] = useState('personal')
-  const recent = transactions.slice(0, 5)
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [balances, setBalances] = useState<Balance[]>([])
+  const [userNames, setUserNames] = useState<Map<string, string>>(new Map())
+  const [userGroups, setUserGroups] = useState<GroupSummary[]>([])
+  const [groupMembers, setGroupMembers] = useState<GroupDetailMember[]>([])
+  const [error, setError] = useState<string | null>(null)
 
+  async function loadTransactions() {
+    try {
+      if (view === 'personal') {
+        const data = await getPersonalTransactions()
+        setTransactions(data)
+      } else {
+        const data = await getGroupTransactions(view)
+        setTransactions(
+          data.map((t: Transaction) => ({ ...t, amount: Number(t.amount) }))
+        )
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, `Unable to load transactions. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
+    }
+  }
+
+  //get the net balances for the user. if personal view: all groups, if group view: that view only
+  async function loadGlobalBalances() {
+    try {
+      if (view === 'personal') {
+        const [balancesRes, groups] = await Promise.all([
+          getGlobalBalances(),
+          getGroups(),
+        ])
+        setBalances(balancesRes.balances)
+
+        const groupDetails = await Promise.all(
+          groups.map((g) => getGroup(g.id))
+        )
+
+        const nameMap = new Map<string, string>()
+        for (const detail of groupDetails) {
+          for (const m of detail.members) {
+            nameMap.set(m.userId, `${m.firstName} ${m.lastName}`)
+          }
+        }
+        setUserNames(nameMap)
+        setGroupMembers([])
+      } else {
+        const [balRes, groupDetail] = await Promise.all([
+          getGroupBalances(view),
+          getGroup(view),
+        ])
+        setBalances(balRes.balances)
+        setGroupMembers(groupDetail.members)
+
+        const nameMap = new Map<string, string>()
+        for (const m of groupDetail.members) {
+          nameMap.set(m.userId, `${m.firstName} ${m.lastName}`)
+        }
+        setUserNames(nameMap)
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, `Unable to load balances. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
+    }
+  }
+
+
+    useEffect(() => {
+      setError(null)
+      loadTransactions()
+      loadGlobalBalances()
+    }, [view])
+
+    useEffect(() => {
+      getGroups().then(setUserGroups).catch(() => setUserGroups([]))
+    }, [])
+
+  function formatDate(date: string) {
+    return new Date(date).toLocaleDateString();
+  }
+
+  //functions that use the fetched transactions to calculate current balance, expenses & income
+  function calculateBalance() {
+    return transactions.reduce((balance, transaction) => {
+      if (transaction.type === "income") {
+        return balance + Number(transaction.amount);
+      }
+
+      return balance - Number(transaction.amount);
+    }, 0);
+  }
+
+  function calculateIncome() {
+    return transactions
+      .filter((transaction) => transaction.type === "income")
+      .reduce((total, transaction) => total + Number(transaction.amount), 0);
+  }
+
+  function calculateExpenses() {
+    return transactions
+      .filter((transaction) => transaction.type === "expense")
+      .reduce((total, transaction) => total + Number(transaction.amount), 0);
+  }
+
+  const currentBalance = calculateBalance();
+  const income = calculateIncome();
+  const expenses = calculateExpenses();
+
+  const mostRecent = transactions.slice(0, 5);
   return (
     <Layout
       title="Dashboard"
@@ -20,7 +130,7 @@ export default function Dashboard() {
             className="h-9 border border-gray-200 rounded-lg px-3 text-sm bg-white text-gray-700"
           >
             <option value="personal">📍 Personal View</option>
-            {groups.map((g) => (
+            {userGroups.map((g) => (
               <option key={g.id} value={g.id}>
                 👥 {g.name}
               </option>
@@ -36,70 +146,109 @@ export default function Dashboard() {
         </>
       }
     >
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <Card label="Current balance" value="$1,842.50" sub="↑ Updated just now" />
-        <Card label="Income (May)" value="+$2,400.00" valueClass="text-green-700" sub="2 sources this month" />
-        <Card label="Expenses (May)" value="−$557.50" valueClass="text-red-700" sub="Across 8 transactions" />
+    {error && <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 p-6 text-sm text-red-700">{error}</div>}
+    <div className={`grid grid-cols-1 ${view === 'personal' ? 'sm:grid-cols-3' : ''} gap-4 mb-6`}>
+      {view === 'personal' && (
+        <Card
+          label="Current balance"
+          value={`$${currentBalance.toFixed(2)}`}
+          sub="Updated from transactions"
+        />
+      )}
+      {view === 'personal' && (
+        <Card
+          label="Income"
+          value={`+$${income.toFixed(2)}`}
+          valueClass="text-green-700"
+          sub={`${transactions.filter(t => t.type === "income").length} transactions`}
+        />
+      )}
+      <Card
+        label={view === 'personal' ? 'Expenses' : 'Total spent'}
+        value={`−$${expenses.toFixed(2)}`}
+        valueClass="text-red-700"
+        sub={`${transactions.length} transaction${transactions.length === 1 ? '' : 's'}`}
+      />
+    </div>
+    <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-6">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="font-semibold text-gray-900">Recent Transactions</h2>
+        <Link to="/transactions" className="text-sm text-[#3D6B4F] font-medium hover:underline">
+          See all →
+        </Link>
       </div>
-
-      <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="font-semibold text-gray-900">Recent Transactions</h2>
-          <Link to="/transactions" className="text-sm text-[#3D6B4F] font-medium hover:underline">
-            See all →
-          </Link>
-        </div>
-        <div className="divide-y divide-gray-100">
-          {recent.map((t) => (
-            <div key={t.id} className="flex items-center justify-between py-3">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-gray-50 flex items-center justify-center text-lg">{t.icon}</div>
-                <div>
-                  <div className="text-sm font-medium text-gray-900">{t.description}</div>
-                  <div className="text-xs text-gray-400">
-                    {t.category} · {t.date}
-                  </div>
+      <div className="divide-y divide-gray-100">
+        {mostRecent.map((t) => (
+          <div key={t.id} className="flex items-center justify-between py-3">
+            <div className="flex items-center gap-3">
+              <div>
+                <div className="text-sm font-medium text-gray-900">{t.description}</div>
+                <div className="text-xs text-gray-400">
+                  {t.category ?? ""} · {formatDate(t.transactionDate)}
                 </div>
               </div>
-              <div className={`text-sm font-semibold ${t.amount < 0 ? 'text-red-700' : 'text-green-700'}`}>
-                {t.amount < 0 ? '−' : '+'}${Math.abs(t.amount).toFixed(2)}
-              </div>
             </div>
-          ))}
-        </div>
+            <div className={`text-sm font-semibold ${ 
+                t.type === 'expense' ? 'text-red-700' : 'text-green-700'}`}>
+              {t.type === 'expense' ? '−' : '+'}${Number(t.amount).toFixed(2)}  
+            </div>
+          </div>
+        ))}
       </div>
-
+      </div>
       <div className="bg-white rounded-2xl border border-gray-100 p-6">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="font-semibold text-gray-900">Group Balances</h2>
+          <h2 className="font-semibold text-gray-900">
+            {view === 'personal' ? 'Group Balances' : `Balances — ${userGroups.find(g => g.id === view)?.name ?? ''}`}
+          </h2>
           <Link to="/groups" className="text-sm text-[#3D6B4F] font-medium hover:underline">
             View groups →
           </Link>
         </div>
         <div className="flex flex-col gap-2">
-          {groups.map((g) => (
+          {balances.length === 0 && (
+            <div className="text-sm text-gray-400">All settled up ✓</div>
+          )}
+          {balances.map((b) => (
             <div
-              key={g.id}
+              key={b.userId}
               className={`rounded-xl px-4 py-3 ${
-                g.balanceAmount < 0 ? 'bg-red-50' : g.balanceAmount > 0 ? 'bg-green-50' : 'bg-gray-50'
+                b.direction === 'you_owe' ? 'bg-red-50' : 'bg-green-50'
               }`}
             >
-              <div className="text-sm font-medium text-gray-900">{g.name}</div>
+              <div className="text-sm font-medium text-gray-900">
+                {userNames.get(b.userId) ?? 'Unknown user'}
+              </div>
               <div
                 className={`text-sm font-semibold ${
-                  g.balanceAmount < 0 ? 'text-red-700' : g.balanceAmount > 0 ? 'text-green-700' : 'text-gray-500'
+                  b.direction === 'you_owe' ? 'text-red-700' : 'text-green-700'
                 }`}
               >
-                {g.balanceAmount === 0 ? 'All settled ✓' : g.balanceLabel}
+                {b.direction === 'you_owe' ? `You owe $${b.amount.toFixed(2)}` : `Owes you $${b.amount.toFixed(2)}`}
               </div>
-              {g.balanceAmount < 0 && g.counterparty && <div className="text-xs text-gray-400">to {g.counterparty}</div>}
-              {g.balanceAmount > 0 && g.counterparty && <div className="text-xs text-gray-400">from {g.counterparty}</div>}
             </div>
           ))}
         </div>
       </div>
+      {view === 'personal' ? (
+        <AddTransactionModal
+          open={addOpen}
+          onClose={() => setAddOpen(false)}
+          onCreated={loadTransactions}
+        />
+      ) : (
+        <AddGroupExpenseModal
+          open={addOpen}
+          onClose={() => setAddOpen(false)}
+          onCreated={() => {
+            loadTransactions()
+            loadGlobalBalances()
+          }}
+          groupId={view}
+          members={groupMembers}
+        />
+      )}
 
-      <AddTransactionModal open={addOpen} onClose={() => setAddOpen(false)} />
     </Layout>
   )
 }
