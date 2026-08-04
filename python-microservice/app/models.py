@@ -67,6 +67,16 @@ class ReceiptExtractionRequest(BaseModel):
     fileName: str = Field(..., min_length=1)
     mimeType: str = Field(..., min_length=1)
     documentType: Literal["receipt", "invoice"] = "receipt"
+    receiptText: str | None = None
+
+
+class ReceiptVisionExtractionResult(BaseModel):
+    merchant: str = Field(..., min_length=1)
+    date: str = Field(..., min_length=1)
+    totalAmount: float = Field(..., ge=0)
+    categorySuggestion: str = Field(..., min_length=1)
+    description: str = Field(..., min_length=1)
+    confidence: str | None = None
 
 
 class ReceiptExtractionResponse(BaseModel):
@@ -75,3 +85,4 @@ class ReceiptExtractionResponse(BaseModel):
     amount: float = Field(..., ge=0)
     category: str
     description: str
+    confidence: str | None = None
