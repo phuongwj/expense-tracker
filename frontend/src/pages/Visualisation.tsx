@@ -331,13 +331,14 @@ const chartData = getChartData(
     <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-6">
       <div className="flex items-center justify-between mb-6">
         <div>
+          <span className="inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-[#EDF4EE] text-[#2D5240] mb-1">
+            {view === 'personal' ? 'Personal' : userGroups.find((g) => g.id === view)?.name ?? 'Group'}
+          </span>
           <h2 className="font-semibold text-gray-900">Income vs Expenses - {range || ""}</h2>
-          <p className="text-xs text-gray-400">
-            {getRangeLabel(range, referenceDate)} · {view === 'personal' ? 'Personal view' : userGroups.find((g) => g.id === view)?.name ?? 'Group view'}
-          </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <button onClick={goToPrevious} className="h-8 w-8 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">←</button>
+          <span className="text-sm text-gray-600 min-w-[130px] text-center">{getRangeLabel(range, referenceDate)}</span>
           <button onClick={goToNext} className="h-8 w-8 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">→</button>
         </div>
       </div>
