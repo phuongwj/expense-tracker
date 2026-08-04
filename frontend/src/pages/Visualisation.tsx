@@ -149,6 +149,24 @@ function getChartData(
     (a,b) => a.order - b.order
   )
 }
+//used for getting the denominator when calculating avg daily spend.
+function getDaysInRange(range: "Week" | "Month" | "Semester", refDate: Date) {
+
+  if (range === "Week") {
+    return 7
+  }
+
+  if (range === "Month") {
+    //number of days in the current month
+    return new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0).getDate()
+  }
+
+  //using 4 months for semester
+  const fourMonthsAgo = new Date(refDate)
+  fourMonthsAgo.setMonth(refDate.getMonth() - 4)
+  const msPerDay = 1000 * 60 * 60 * 24
+  return Math.round((refDate.getTime() - fourMonthsAgo.getTime()) / msPerDay)
+}
 
 export default function Visualisation() {
   const [range, setRange] = useState<(typeof ranges)[number]>('Month')
@@ -156,6 +174,40 @@ export default function Visualisation() {
   const [view, setView] = useState('personal')
   const [userGroups, setUserGroups] = useState<GroupSummary[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [referenceDate, setReferenceDate] = useState(new Date())
+
+  function goToPrevious() {
+    const d = new Date(referenceDate)
+    if (range === 'Week') d.setDate(d.getDate() - 7)
+    else if (range === 'Month') d.setMonth(d.getMonth() - 1)
+    else d.setMonth(d.getMonth() - 4)
+    setReferenceDate(d)
+  }
+
+function goToNext() {
+  const d = new Date(referenceDate)
+  if (range === 'Week') d.setDate(d.getDate() + 7)
+  else if (range === 'Month') d.setMonth(d.getMonth() + 1)
+  else d.setMonth(d.getMonth() + 4)
+
+  //don't allow navigating into the future
+  if (d > new Date()) return
+  setReferenceDate(d)
+}
+
+function getRangeLabel(range: "Week" | "Month" | "Semester", refDate: Date) {
+  if (range === 'Month') {
+    return refDate.toLocaleString('default', { month: 'long', year: 'numeric' })
+  }
+  if (range === 'Week') {
+    const start = new Date(refDate)
+    start.setDate(start.getDate() - 7)
+    return `${start.toLocaleDateString('default', { month: 'short', day: 'numeric' })} – ${refDate.toLocaleDateString('default', { month: 'short', day: 'numeric' })}`
+  }
+  const start = new Date(refDate)
+  start.setMonth(start.getMonth() - 4)
+  return `${start.toLocaleDateString('default', { month: 'short', year: 'numeric' })} – ${refDate.toLocaleDateString('default', { month: 'short', year: 'numeric' })}`
+}
 
   useEffect(() => {
     async function loadTransactions() {
@@ -187,32 +239,30 @@ export default function Visualisation() {
   //apply the weekly/monthly/semester filter on transaction data
   const filteredTransactions = transactions.filter((t) => {
     const date = new Date(t.transactionDate)
-    const now = new Date()
 
     if (range === 'Week') {
-      const sevenDaysAgo = new Date()
-      sevenDaysAgo.setDate(now.getDate() - 7)
-
-      return date >= sevenDaysAgo
+      const start = new Date(referenceDate)
+      start.setDate(start.getDate() - 7)
+      return date >= start && date <= referenceDate
     }
 
     if (range === 'Month') {
       return (
-        date.getMonth() === now.getMonth() &&
-        date.getFullYear() === now.getFullYear()
+        date.getMonth() === referenceDate.getMonth() &&
+        date.getFullYear() === referenceDate.getFullYear()
       )
     }
 
     if (range === 'Semester') {
-      //last 4 months
-      const fourMonthsAgo = new Date()
-      fourMonthsAgo.setMonth(now.getMonth() - 4)
-
-      return date >= fourMonthsAgo
+      //treating semester as 4 months
+      const start = new Date(referenceDate)
+      start.setMonth(start.getMonth() - 4)
+      return date >= start && date <= referenceDate
     }
 
     return true
   })
+
 
 const income = calculateTotalIncome(filteredTransactions)
 
@@ -233,6 +283,8 @@ const chartData = getChartData(
     ...chartData.flatMap(data => [data.income, data.expense]),
     1
   )
+
+  const daysInRange = getDaysInRange(range, referenceDate);
 
   return (
     <Layout
@@ -255,7 +307,10 @@ const chartData = getChartData(
             {ranges.map((r) => (
               <button
                 key={r}
-                onClick={() => setRange(r)}
+                onClick={() => {
+                  setRange(r)
+                  setReferenceDate(new Date())
+                }}
                 className={`h-9 px-4 text-sm font-medium ${
                   range === r ? 'bg-[#3D6B4F] text-white' : 'text-gray-600 hover:bg-gray-50'
                 }`}
@@ -268,24 +323,35 @@ const chartData = getChartData(
       }
     >
     {isLoading ? (
-      <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center text-sm text-gray-400">
-        Loading…
-      </div>
-    ) : filteredTransactions.length === 0 ? (
     <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center text-sm text-gray-400">
-      No transactions to show for this {range.toLowerCase()} {view === 'personal' ? 'in your personal view' : 'in this group'}.
+      Loading…
     </div>
-    ) : (
-    <>
-      <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-6">
-        <h2 className="font-semibold text-gray-900">Income vs Expenses - {range || ""}</h2>
-        <p className="text-xs text-gray-400 mb-6">
-          {range || ""} breakdown · {view === 'personal' ? 'Personal view' : userGroups.find((g) => g.id === view)?.name ?? 'Group view'}
+  ) : (
+  <>
+    <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-6">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <span className="inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-[#EDF4EE] text-[#2D5240] mb-1">
+            {view === 'personal' ? 'Personal' : userGroups.find((g) => g.id === view)?.name ?? 'Group'}
+          </span>
+          <h2 className="font-semibold text-gray-900">Income vs Expenses - {range || ""}</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={goToPrevious} className="h-8 w-8 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">←</button>
+          <span className="text-sm text-gray-600 min-w-[130px] text-center">{getRangeLabel(range, referenceDate)}</span>
+          <button onClick={goToNext} className="h-8 w-8 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">→</button>
+        </div>
+      </div>
+
+      {filteredTransactions.length === 0 ? (
+        <p className="text-center text-sm text-gray-400 py-10">
+          No transactions to show for this {range.toLowerCase()} {view === 'personal' ? 'in your personal view' : 'in this group'}.
         </p>
+      ) : (
         <div className="flex items-end gap-6 h-48">
           {chartData.map((data) => (
             <div key={data.label} className="flex flex-col items-center gap-1">
-          <div className="flex items-end gap-1 h-40">
+              <div className="flex items-end gap-1 h-40">
                 {view === 'personal' && (
                   <div
                     className="w-8 bg-[#2D5240] rounded-t"
@@ -301,45 +367,50 @@ const chartData = getChartData(
             </div>
           ))}
         </div>
-      </div>
+      )}
+    </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-6">
-        <h2 className="font-semibold text-gray-900">Expenses by Category</h2>
-        <div className="flex flex-col gap-3">
-          {byCategory.map((c) => (
-            <div key={c.name} className="flex items-center gap-3">
-              <span className="w-3 h-3 rounded-full bg-[#3D6B4F]" />
-              <span className="flex-1 text-sm text-gray-700">{c.name}</span>
-              <div className="w-40 h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                <div className="h-full bg-[#3D6B4F]" style={{ width: `${c.pct}%` }} />
+    {filteredTransactions.length > 0 && (
+      <>
+        <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-6">
+          <h2 className="font-semibold text-gray-900">Expenses by Category</h2>
+          <div className="flex flex-col gap-3">
+            {byCategory.map((c) => (
+              <div key={c.name} className="flex items-center gap-3">
+                <span className="w-3 h-3 rounded-full bg-[#3D6B4F]" />
+                <span className="flex-1 text-sm text-gray-700">{c.name}</span>
+                <div className="w-40 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                  <div className="h-full bg-[#3D6B4F]" style={{ width: `${c.pct}%` }} />
+                </div>
+                <span className="w-10 text-right text-sm font-semibold text-gray-900">{c.pct}%</span>
               </div>
-              <span className="w-10 text-right text-sm font-semibold text-gray-900">{c.pct}%</span>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
 
-      <div className={`grid grid-cols-1 ${view === 'personal' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-4`}>
-        <Stat
-          label="Avg. daily spend"
-          value={`$${(expenses / 31).toFixed(2)}`}
-          sub="Based on current month"
-        />
-        <Stat
-          label="Biggest expense"
-          value={byCategory.length > 0 ? `${biggestExpense.name} $${biggestExpense.amount.toFixed(2)}` : "-"}
-          sub={byCategory.length > 0 ? `${biggestExpense.pct}% of expenses` : ""}
-        />
-        {view === 'personal' && (
+        <div className={`grid grid-cols-1 ${view === 'personal' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-4`}>
           <Stat
-            label="Savings rate"
-            value={`${income === 0 ? 0 : ((income - expenses) / income * 100).toFixed(1)}%`}
-            sub="Income remaining after expenses"
+            label="Avg. daily spend"
+            value={`$${(expenses / daysInRange).toFixed(2)}`}
+            sub={`Based on ${getRangeLabel(range, referenceDate)}`}
           />
-        )}
-      </div>
-    </>
-  )}
+          <Stat
+            label="Biggest expense"
+            value={byCategory.length > 0 ? `${biggestExpense.name} $${biggestExpense.amount.toFixed(2)}` : "-"}
+            sub={byCategory.length > 0 ? `${biggestExpense.pct}% of expenses` : ""}
+          />
+          {view === 'personal' && (
+            <Stat
+              label="Savings rate"
+              value={`${income === 0 ? 0 : ((income - expenses) / income * 100).toFixed(1)}%`}
+              sub="Income remaining after expenses"
+            />
+          )}
+        </div>
+      </>
+    )}
+  </>
+)}
 </Layout>
 
   )
