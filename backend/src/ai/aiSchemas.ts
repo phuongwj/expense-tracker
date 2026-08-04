@@ -43,10 +43,6 @@ export const insightsSummarySchema = z.discriminatedUnion("scope", [
   groupInsightsSummarySchema,
 ]);
 
-export const insightsRequestBodySchema = z
-  .union([insightsSummarySchema, z.object({}).strict()])
-  .optional();
-
 export const receiptDocumentTypeSchema = z.enum(["receipt", "invoice"]);
 
 export const receiptExtractionRequestSchema = z
@@ -82,7 +78,6 @@ export type PersonalInsightsSummary = z.infer<
 >;
 export type GroupInsightsSummary = z.infer<typeof groupInsightsSummarySchema>;
 export type InsightsSummary = z.infer<typeof insightsSummarySchema>;
-export type InsightsRequestBody = z.infer<typeof insightsRequestBodySchema>;
 export type ReceiptDocumentType = z.infer<typeof receiptDocumentTypeSchema>;
 export type ReceiptExtractionRequestBody = z.infer<
   typeof receiptExtractionRequestSchema

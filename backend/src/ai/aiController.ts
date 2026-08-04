@@ -1,17 +1,16 @@
 import { Request, Response } from "express";
 
 import { asyncHandler } from "../middleware/asyncHandler.ts";
+import { getPersonalTransactions } from "../transactions/transactionRepository.ts";
 import {
   buildDraftTransaction,
-  buildMockFinancialSummary,
   buildMockReceiptExtractionPayload,
+  buildPersonalFinancialSummary,
   buildUploadedReceiptPayload,
   postInsightsRequest,
   postReceiptExtractionRequest,
 } from "./aiService.ts";
 import {
-  insightsRequestBodySchema,
-  insightsSummarySchema,
   receiptExtractionMultipartFieldsSchema,
   receiptExtractionRequestSchema,
 } from "./aiSchemas.ts";
@@ -39,21 +38,9 @@ const buildValidationFields = (
 
 export const generateInsights = asyncHandler(
   async (req: Request, res: Response) => {
-    const parsedBody = insightsRequestBodySchema.safeParse(req.body);
-
-    if (!parsedBody.success) {
-      return res.status(400).json({
-        error: "Validation failed.",
-        fields: buildValidationFields(parsedBody.error.issues),
-      });
-    }
-
-    const body = parsedBody.data;
-    const hasProvidedSummary =
-      !!body && typeof body === "object" && Object.keys(body).length > 0;
-    const summary = hasProvidedSummary
-      ? insightsSummarySchema.parse(body)
-      : buildMockFinancialSummary();
+    const userId = req.userId!;
+    const transactions = await getPersonalTransactions(userId, {});
+    const summary = buildPersonalFinancialSummary(transactions);
 
     const result = await postInsightsRequest(summary);
 

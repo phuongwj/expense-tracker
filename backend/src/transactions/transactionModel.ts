@@ -4,6 +4,7 @@ export interface Transaction {
     groupId: string;
     paidBy: string | null;
     categoryId: string | null;
+    category: string | null;
     type: 'expense' | 'income';
     amount: number;
     transactionDate: Date;

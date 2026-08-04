@@ -1,5 +1,7 @@
+import type { Transaction } from "../transactions/transactionModel.ts";
 import {
   InsightsSummary,
+  PersonalInsightsSummary,
   ReceiptDocumentType,
   ReceiptExtractionRequestBody,
 } from "./aiSchemas.ts";
@@ -81,18 +83,57 @@ const parseJsonResponse = async <T>(response: Response): Promise<T | null> => {
   }
 };
 
-export const buildMockFinancialSummary = (): InsightsSummary => ({
-  scope: "personal",
-  period: "monthly",
-  totalIncome: 1800,
-  totalExpenses: 1350,
-  netBalance: 450,
-  topCategories: [
-    { category: "Food", amount: 400 },
-    { category: "Rent", amount: 750 },
-  ],
-  recurringExpenses: [{ name: "Netflix", amount: 17 }],
-});
+const PERSONAL_INSIGHTS_PERIOD = "monthly";
+const TOP_CATEGORY_LIMIT = 5;
+
+export const buildPersonalFinancialSummary = (
+  transactions: Transaction[]
+): PersonalInsightsSummary => {
+  let totalIncome = 0;
+  let totalExpenses = 0;
+  const categoryTotals = new Map<string, number>();
+  const recurringExpenses: { name: string; amount: number }[] = [];
+
+  for (const transaction of transactions) {
+    const amount = Number(transaction.amount);
+
+    if (transaction.type === "income") {
+      totalIncome += amount;
+      continue;
+    }
+
+    totalExpenses += amount;
+
+    if (transaction.category) {
+      categoryTotals.set(
+        transaction.category,
+        (categoryTotals.get(transaction.category) ?? 0) + amount
+      );
+    }
+
+    if (transaction.isRecurring) {
+      recurringExpenses.push({
+        name: transaction.description || transaction.category || "Recurring expense",
+        amount,
+      });
+    }
+  }
+
+  const topCategories = Array.from(categoryTotals.entries())
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, TOP_CATEGORY_LIMIT);
+
+  return {
+    scope: "personal",
+    period: PERSONAL_INSIGHTS_PERIOD,
+    totalIncome,
+    totalExpenses,
+    netBalance: totalIncome - totalExpenses,
+    topCategories,
+    recurringExpenses,
+  };
+};
 
 export const postInsightsRequest = async (
   payload: InsightsSummary
