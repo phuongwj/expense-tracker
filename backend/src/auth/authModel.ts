@@ -10,7 +10,7 @@ export interface User {
 // The user shape safe to send back to clients: no password_hash, and no
 // created_at (auth responses don't need it — a profile/settings route can
 // expose that later).
-export type PublicUser = Pick<User, 'id' | 'firstName' | 'lastName' | 'email'>;
+import type { PublicUser } from '@expense-tracker/shared/auth'
 
 // Maps any full/partial user row down to the client-safe shape. Single source
 // of truth so signup and login return an identical user object.

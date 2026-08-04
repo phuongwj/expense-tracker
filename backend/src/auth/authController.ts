@@ -21,6 +21,7 @@ import {
 import { SignupInput, LoginInput, ForgotPasswordInput, ResetPasswordInput } from "./authSchemas.ts";
 import { toPublicUser } from "./authModel.ts";
 import { sendPasswordResetEmail } from "../config/email.ts";
+import { processRecurringTransactionsForOwner } from "../transactions/transactionRepository.ts";
 
 const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET as string;
 const SALT_ROUNDS = Number(process.env.SALT_ROUNDS) || 10;
@@ -115,10 +116,14 @@ export const logIn = asyncHandler(async (req: Request<{}, {}, LoginInput>, res: 
   const { accessToken, refreshToken } = await issueTokenPair(user.id);
   setRefreshCookie(res, refreshToken);
 
+  //if user has recurring transactions that are past due, create them now and return the number of created transactions.
+  const recurringProcessed = await processRecurringTransactionsForOwner(user.id);
+
   return res.status(200).json({
     message: 'Logged in successfully.',
     accessToken,
     user: toPublicUser(user),
+    recurringProcessed,
   });
 });
 

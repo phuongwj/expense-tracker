@@ -11,13 +11,14 @@ import {
     updateGroupTransaction,
     deleteGroupTransaction,
     insertTransactionSplits,
+    processRecurringTransactionsForOwner,
 } from "./transactionRepository.ts";
 
 import { CreateTransactionInput, GetTransactionsInput, UpdateTransactionInput, CreateGroupTransactionInput } from "./transactionSchemas.ts";
 import { TransactionSplit } from "./transactionModel.ts";
 import { asyncHandler } from "../middleware/asyncHandler.ts";
 
-/**
+/** 
  * POST /api/transactions
  * Creates a new personal transaction for the authenticated user.
  */
@@ -46,6 +47,8 @@ export const createPersonal = asyncHandler (async (req: Request<{}, {}, CreateTr
 export const getPersonal = asyncHandler (async (req: Request, res: Response) => {
     const userId = req.userId!;
     const filters = (req as any).validatedQuery as GetTransactionsInput;
+
+    await processRecurringTransactionsForOwner(userId);
 
     const transactions = await getPersonalTransactions(userId, filters);
 
@@ -164,6 +167,8 @@ export const getGroup = asyncHandler (async (
     const groupId = req.params.groupId;
     const filters = (req as any).validatedQuery;
 
+    await processRecurringTransactionsForOwner(req.userId!);
+
     const transactions = await getGroupTransactions(groupId, filters);
 
     return res.status(200).json({ transactions });
@@ -184,8 +189,8 @@ export const updateGroup = asyncHandler (async (
     const transaction = await updateGroupTransaction(
         id,
         groupId,
-        amount,
         type,
+        amount,
         categoryId ?? null,
         transactionDate,
         description,

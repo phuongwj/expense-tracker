@@ -28,3 +28,10 @@ export const resetPasswordSchema = z.object({
         .max(72, "Password must be at most 72 characters."),
 });
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+export interface PublicUser {
+    id: string
+    firstName: string 
+    lastName: string 
+    email: string
+}
