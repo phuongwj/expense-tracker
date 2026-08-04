@@ -34,3 +34,17 @@ export interface BalanceRow {
     isOwed: string;
     amount: string;
 }
+
+//Interface used for Transactions automatically created when a recurring transaction is due.
+export interface DueRecurringTemplate {
+    id: string;
+    userId: string;
+    groupId: string | null;
+    paidBy: string | null;
+    categoryId: string | null;
+    type: 'expense' | 'income';
+    amount: number;
+    description: string | null;
+    recurringInterval: string;
+    nextOccurrence: string; // ISO date string, e.g. "2026-07-20"
+}
