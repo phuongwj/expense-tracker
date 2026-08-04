@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Modal from './Modal'
 import { createPersonalTransaction } from '../services/transactions'
-import { getCategories, type Category } from "../services/categories"
+import { getCategories, createCategory, type Category } from "../services/categories"
 import { getErrorMessage, SUPPORT_EMAIL } from '../utils/errors'
 
 export default function AddTransactionModal({
@@ -20,6 +20,10 @@ export default function AddTransactionModal({
   const [description, setDescription] = useState('')
   const [categories, setCategories] = useState<Category[]>([])
   const [categoryId, setCategoryId] = useState<string | null>(null)
+  const [isAddingCategory, setIsAddingCategory] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [isSavingCategory, setIsSavingCategory] = useState(false)
+  const [categoryFormError, setCategoryFormError] = useState<string | null>(null)
   const [recurring, setRecurring] = useState(false)
   const [repeats, setRepeats] = useState('Monthly')
   const [formError, setFormError] = useState<string | null>(null)
@@ -57,7 +61,39 @@ export default function AddTransactionModal({
     setCategoryId(null)
     setRecurring(false)
     setRepeats('Monthly')
+    setIsAddingCategory(false)
+    setNewCategoryName('')
+    setCategoryFormError(null)
     onClose()
+  }
+
+  const handleAddCategory = async () => {
+    const trimmedName = newCategoryName.trim()
+
+    if (!trimmedName) {
+      setCategoryFormError('Please enter a category name.')
+      return
+    }
+
+    if (categories.some((c) => c.name.toLowerCase() === trimmedName.toLowerCase())) {
+      setCategoryFormError('You already have a category with this name.')
+      return
+    }
+
+    setCategoryFormError(null)
+    setIsSavingCategory(true)
+
+    try {
+      const created = await createCategory(trimmedName)
+      setCategories((prev) => [...prev, created])
+      setCategoryId(created.id)
+      setNewCategoryName('')
+      setIsAddingCategory(false)
+    } catch (err) {
+      setCategoryFormError(getErrorMessage(err, `Unable to create this category right now. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
+    } finally {
+      setIsSavingCategory(false)
+    }
   }
 
   //client side validations before saving the transaction
@@ -169,7 +205,7 @@ export default function AddTransactionModal({
       <div className="mb-4">
         <label className="label" id="tx-category-label">Category</label>
         <div className="flex flex-wrap gap-2" role="group" aria-labelledby="tx-category-label">
-          {categories.length === 0 && (
+          {categories.length === 0 && !isAddingCategory && (
             <p className="text-sm text-gray-400">
               No categories available.
             </p>
@@ -187,7 +223,61 @@ export default function AddTransactionModal({
               {c.name}
             </button>
           ))}
+
+          {!isAddingCategory && (
+            <button
+              type="button"
+              onClick={() => setIsAddingCategory(true)}
+              className="px-3 py-2 rounded-xl border border-dashed border-gray-300 text-sm text-gray-500 hover:border-[#3D6B4F] hover:text-[#2D5240]"
+            >
+              + Add category
+            </button>
+          )}
         </div>
+
+        {isAddingCategory && (
+          <div className="mt-2">
+            <div className="flex gap-2">
+              <input
+                autoFocus
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void handleAddCategory()
+                  }
+                }}
+                placeholder="e.g. Textbooks"
+                className="input"
+                disabled={isSavingCategory}
+              />
+              <button
+                type="button"
+                onClick={() => void handleAddCategory()}
+                disabled={isSavingCategory}
+                className="h-11 px-4 rounded-xl bg-[#3D6B4F] text-white text-sm font-semibold hover:bg-[#2D5240] disabled:opacity-50 shrink-0"
+              >
+                {isSavingCategory ? 'Adding...' : 'Add'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddingCategory(false)
+                  setNewCategoryName('')
+                  setCategoryFormError(null)
+                }}
+                disabled={isSavingCategory}
+                className="h-11 px-4 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 shrink-0"
+              >
+                Cancel
+              </button>
+            </div>
+            {categoryFormError && (
+              <p className="mt-1.5 text-xs text-red-600">{categoryFormError}</p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between py-3 border-t border-gray-100 mb-1">
