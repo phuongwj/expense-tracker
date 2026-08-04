@@ -4,21 +4,32 @@ const BASE_URL = import.meta.env.VITE_API_URL ?? '/api'
 
 const api = axios.create({
   baseURL: BASE_URL,
-  headers: { 'Content-Type': 'application/json' },
-  withCredentials: true, // send/receive the httpOnly refresh cookie
+  withCredentials: true,
 })
 
 let accessToken: string | null = null
+
 export function setAccessToken(token: string | null) {
   accessToken = token
 }
 
-// REQUEST interceptor — attaches JWT token to every request automatically
+// REQUEST interceptor: attaches the JWT token and preserves browser-managed multipart headers.
 api.interceptors.request.use(
   (config) => {
+    const headers = config.headers ?? {}
+
+    if (config.data instanceof FormData) {
+      delete headers['Content-Type']
+    } else if (!headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json'
+    }
+
+    config.headers = headers
+
     if (accessToken) {
       config.headers.Authorization = `Bearer ${accessToken}`
     }
+
     return config
   },
   (error) => Promise.reject(error)
@@ -27,19 +38,21 @@ api.interceptors.request.use(
 // try a silent refresh before giving up on 401
 let refreshPromise: Promise<string | null> | null = null
 
-// RESPONSE interceptor — if token expires, redirect to login automatically
+// RESPONSE interceptor: if token expires, retry once after refresh before redirecting.
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const original = error.config
-    if (error.response?.status === 401 && !original._retry) {
+
+    if (error.response?.status === 401 && original && !original._retry) {
       original._retry = true
+
       try {
         if (!refreshPromise) {
           refreshPromise = axios
             .post(`${BASE_URL}/auth/refresh`, {}, { withCredentials: true })
             .then((res) => {
-              const token = res.data.accessToken
+              const token = res.data.accessToken as string | null
               setAccessToken(token)
               return token
             })
@@ -47,18 +60,25 @@ api.interceptors.response.use(
               refreshPromise = null
             })
         }
+
         const newToken = await refreshPromise
         if (newToken) {
+          original.headers = original.headers ?? {}
           original.headers.Authorization = `Bearer ${newToken}`
           return api(original)
         }
       } catch {
         setAccessToken(null)
-        if (!['/login', '/signup', '/forgot-password', '/reset-password'].includes(window.location.pathname)) {
-          window.location.href = '/login' // refresh token itself failed, really logged out
+        if (
+          !['/login', '/signup', '/forgot-password', '/reset-password'].includes(
+            window.location.pathname
+          )
+        ) {
+          window.location.href = '/login'
         }
       }
     }
+
     return Promise.reject(error)
   }
 )

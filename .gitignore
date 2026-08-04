@@ -24,9 +24,11 @@ dist-ssr
 *.sw?
 .env
 venv/
+.venv/
 __pycache__/
 # Local Python environment files
 python-microservice/.env
 python-microservice/venv/
+python-microservice/.venv/
 python-microservice/app/__pycache__/
 __pycache__/

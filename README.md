@@ -211,6 +211,186 @@ node_modules/@expense-tracker/shared → ../../packages/shared
 See [API_DOCS.md](API_DOCS.md) for full request/response docs for all endpoints.
 
 
+## Local Setup For AI/OCR Testing
+
+This section documents the current local setup needed to run and test Rohan's AI/OCR work end to end.
+
+### Required local services
+
+You need these four services running locally:
+
+1. PostgreSQL 16 in Docker
+2. Backend Express server
+3. Python FastAPI microservice
+4. Frontend Vite app
+
+### 1. Start PostgreSQL in Docker
+
+Windows PowerShell:
+
+```powershell
+docker run --name expense-tracker-postgres `
+  -e POSTGRES_USER=postgres `
+  -e POSTGRES_PASSWORD=postgres `
+  -e POSTGRES_DB=expense_tracker `
+  -p 5432:5432 `
+  -d postgres:16
+```
+
+If you already created the container earlier, start it with:
+
+```powershell
+docker start expense-tracker-postgres
+```
+
+### 2. Backend environment setup
+
+Create `backend/.env` from `backend/.env.example`.
+
+Example local values for the Docker database:
+
+```env
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_DATABASE=expense_tracker
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/expense_tracker
+
+ACCESS_TOKEN_SECRET=replace_with_a_long_random_secret
+AI_SERVICE_URL=http://127.0.0.1:8000
+
+RESEND_API_KEY=your_resend_api_key_here
+RESEND_FROM_EMAIL=noreply@example.com
+```
+
+Other values such as `SALT_ROUNDS`, `ACCESS_TOKEN_EXPIRES_IN`, `REFRESH_TOKEN_TTL_DAYS`, and `PORT` can stay aligned with the example file unless you need to change them.
+
+### 3. Run backend migrations
+
+```powershell
+cd backend
+npm install
+npm run migrate:up
+```
+
+### 4. Start the backend
+
+```powershell
+cd backend
+npm start
+```
+
+The backend runs on `http://127.0.0.1:3000` by default.
+
+### 5. Python microservice environment setup
+
+Create `python-microservice/.env` from `python-microservice/.env.example`.
+
+Required variables:
+
+```env
+GROQ_API_KEY=your_groq_api_key_here
+GROQ_VISION_MODEL=qwen/qwen3.6-27b
+```
+
+Do not commit real API keys.
+
+### 6. Start the Python FastAPI microservice
+
+```powershell
+cd python-microservice
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+Copy-Item .env.example .env
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+The FastAPI service runs on `http://127.0.0.1:8000`.
+
+### 7. Start the frontend
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend runs on `http://localhost:5173`.
+
+## Testing Rohan's AI/OCR Work
+
+### 1. Signup and login
+
+1. Open `http://localhost:5173`
+2. Create an account from the signup page
+3. Log in
+4. Confirm you are redirected into the app without auth errors
+
+### 2. AI Insights page
+
+1. Open the AI Insights page in the frontend
+2. Trigger insights refresh
+3. The frontend calls `POST /api/ai/insights`
+4. If Groq is configured, the Python service can generate Groq-backed insights
+5. If Groq is unavailable, the fallback insights response is still returned
+
+### 3. Smart Scan receipt image upload
+
+1. Open the Smart Scan page
+2. Upload a `.jpg`, `.jpeg`, `.png`, or `.webp` receipt image
+3. Review the extracted draft fields
+4. The frontend sends the image to `POST /api/ai/extract-receipt`
+5. The backend forwards the image to the Python service
+6. The Python service attempts Groq Vision OCR and falls back safely if needed
+
+### 4. Save the OCR draft transaction
+
+1. Review or edit the extracted amount, date, merchant, description, and type
+2. Click `Save transaction`
+3. Smart Scan sends the reviewed draft to `POST /api/transactions`
+4. On success, the frontend shows a success message and redirects to `/transactions`
+
+### 5. Verify the saved transaction
+
+#### Option A: Verify through the backend API
+
+Use the access token returned at login:
+
+```powershell
+$token = "YOUR_ACCESS_TOKEN"
+
+Invoke-RestMethod -Uri "http://127.0.0.1:3000/api/transactions" `
+  -Method GET `
+  -Headers @{
+    Authorization = "Bearer $token"
+  }
+```
+
+The response should include the saved transaction in the `transactions` array.
+
+#### Option B: Verify directly in PostgreSQL
+
+```powershell
+docker exec -it expense-tracker-postgres psql -U postgres -d expense_tracker
+```
+
+Then run:
+
+```sql
+SELECT id, user_id, type, amount, category_id, transaction_date, description
+FROM transactions
+ORDER BY created_at DESC;
+```
+
+## Known Limitations
+
+- The current Transactions page still uses mock/local frontend data, so a real backend-saved transaction may not appear visually there yet.
+- Smart Scan currently saves `categoryId` as `null` because a category lookup API is not available yet.
+- Groq Vision OCR has safe fallback behavior if the API key is missing, the model is unavailable, the request is rate-limited, or the model response cannot be parsed cleanly.
+
+
 ## Database migrations
 
 We use [node-pg-migrate](https://github.com/salsita/node-pg-migrate) to manage database schema changes. Instead of modifying tables by hand, every change is a timestamped SQL file in `backend/migrations/`. Migrations run in order, so anyone can spin up the same database from scratch.
