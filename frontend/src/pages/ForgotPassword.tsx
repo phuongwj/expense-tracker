@@ -6,6 +6,7 @@ import * as authService from '../services/authService'
 
 import type { ForgotPasswordInput, ResetPasswordInput } from '@expense-tracker/shared/auth'
 import { forgotPasswordSchema, resetPasswordSchema } from '@expense-tracker/shared/auth'
+import { getErrorMessage, SUPPORT_EMAIL } from '../utils/errors'
 
 const inp = (hasError: boolean) =>
   `w-full h-11 border rounded-xl px-3.5 text-sm outline-none transition ${
@@ -30,10 +31,10 @@ export default function ForgotPassword() {
     try {
       await authService.forgotPassword(data)
       setEmail(data.email)
+      resetForm.setValue('email', data.email)
       setStep('reset')
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { message?: string } } }
-      setApiError(e.response?.data?.message ?? 'Something went wrong. Please try again.')
+      setApiError(getErrorMessage(err, `Unable to send a reset code. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
     } finally {
       setIsSubmitting(false)
     }
@@ -52,8 +53,7 @@ export default function ForgotPassword() {
       await authService.resetPassword({ ...data, email })
       navigate('/login', { replace: true })
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { message?: string } } }
-      setApiError(e.response?.data?.message ?? 'Invalid or expired code. Please try again.')
+      setApiError(getErrorMessage(err, `Invalid or expired code. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
     } finally {
       setIsSubmitting(false)
     }

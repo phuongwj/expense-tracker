@@ -25,22 +25,30 @@ export default function GroupDetail() {
 
   async function loadTransactions() {
     if (!id) return
-    const data = await getGroupTransactions(id)
-    setTransactions(
-      data.map((t: GroupTransaction) => ({
-        ...t,
-        amount: Number(t.amount),
-        splits: t.splits?.map((s) => ({ ...s, amount: Number(s.amount) })),
-      }))
-    )
+    try {
+      const data = await getGroupTransactions(id)
+      setTransactions(
+        data.map((t: GroupTransaction) => ({
+          ...t,
+          amount: Number(t.amount),
+          splits: t.splits?.map((s) => ({ ...s, amount: Number(s.amount) })),
+        }))
+      )
+    } catch (err) {
+      setError(getErrorMessage(err, `Unable to load transactions for this group. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
+    }
   }
 
   async function loadBalances() {
-    if (!id) { 
-      return 
+    if (!id) {
+      return
     }
-    const res = await getGroupBalances(id)
-    setBalances(res.balances)
+    try {
+      const res = await getGroupBalances(id)
+      setBalances(res.balances)
+    } catch (err) {
+      setError(getErrorMessage(err, `Unable to load balances for this group. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
+    }
   }
 
   useEffect(() => {
@@ -51,12 +59,8 @@ export default function GroupDetail() {
     setIsLoading(true)
     getGroup(id)
       .then(setData)
-      .catch((err: any) => {
-        if (err?.response?.status === 404) {
-          setError('No group to display.')
-        } else {
-          setError('Unable to load group details.')
-        }
+      .catch((err) => {
+        setError(getErrorMessage(err, `Unable to load group details. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
         setData(null)
       })
       .finally(() => setIsLoading(false))

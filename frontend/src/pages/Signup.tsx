@@ -7,6 +7,7 @@ import * as authService from '../services/authService'
 
 import type { SignupInput } from '@expense-tracker/shared/auth'
 import { signupSchema } from '@expense-tracker/shared/auth'
+import { getErrorMessage, SUPPORT_EMAIL } from '../utils/errors'
 
 type FormData = SignupInput
 
@@ -28,8 +29,7 @@ export default function Signup() {
       login(user)
       navigate('/dashboard', { replace: true })
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { message?: string } } }
-      setApiError(e.response?.data?.message ?? 'Something went wrong. Please try again.')
+      setApiError(getErrorMessage(err, `Unable to create an account due to a server issue. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
     } finally {
       setIsSubmitting(false)
     }
@@ -42,17 +42,13 @@ export default function Signup() {
 
   return (
     <div className="min-h-screen flex">
-      <div className="hidden lg:flex w-[420px] shrink-0 bg-[#2D5240] flex-col justify-between p-12">
-        <div className="text-3xl text-white font-bold">Expense Tracker</div>
+      <div className="hidden lg:flex w-[420px] shrink-0 bg-[#2D5240] flex-col justify-center p-12">
+        <div className="text-3xl text-white font-bold mb-20">Expense Tracker</div>
         <div>
           <h1 className="text-4xl font-light text-white leading-tight mb-4">Get <strong>started</strong></h1>
           <p className="text-white/60 text-sm leading-relaxed">
             Track your spending, split bills with friends, and get AI-powered insights into your habits.
           </p>
-        </div>
-        <div className="flex gap-10">
-          <div><div className="text-3xl font-semibold text-white">$1,842</div><div className="text-xs text-white/50 mt-1">Your balance</div></div>
-          <div><div className="text-3xl font-semibold text-white">3</div><div className="text-xs text-white/50 mt-1">Active groups</div></div>
         </div>
       </div>
       <div className="flex-1 flex items-center justify-center p-8 bg-[#F2F0EA]">

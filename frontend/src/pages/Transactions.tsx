@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import { getPersonalTransactions, deletePersonalTransaction, getGroupTransactions, deleteGroupTransaction, type Transaction } from '../services/transactions'
 import { getGroups, getGroup } from '../services/groupService'
 import type { GroupSummary, GroupDetailMember } from '@expense-tracker/shared/groups'
+import { getErrorMessage, SUPPORT_EMAIL } from '../utils/errors'
 
 const tabs = ['All', 'Expenses', 'Income', 'Recurring'] as const
 
@@ -15,6 +16,7 @@ export default function Transactions() {
   const navigate = useNavigate()
   const [addOpen, setAddOpen] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [editTransaction, setEditTransaction] = useState<Transaction | null>(null)
   const [tab, setTab] = useState<(typeof tabs)[number]>('All')
   const [query, setQuery] = useState('')
@@ -134,6 +136,9 @@ export default function Transactions() {
         </>
       }
     >
+      {deleteError && (
+        <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 p-6 text-sm text-red-700">{deleteError}</div>
+      )}
       <div className={`grid grid-cols-1 ${view === 'personal' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-4 mb-6`}>
         {view === 'personal' && (
           <Card
@@ -294,7 +299,7 @@ export default function Transactions() {
 
               setItems((prev) => prev.filter((t) => t.id !== deleteId))
             } catch (err) {
-              console.error("Failed to delete transaction:", err)
+              setDeleteError(getErrorMessage(err, `Unable to delete this transaction. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
             } finally {
               setDeleteId(null)
             }
