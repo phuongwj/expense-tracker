@@ -12,3 +12,9 @@ export async function getCategories() {
 
   return response.data.categories
 }
+
+export async function createCategory(name: string): Promise<Category> {
+  const response = await api.post("/categories", { name })
+
+  return response.data
+}
