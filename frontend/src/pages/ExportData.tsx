@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import api from '../services/api'
 
-const viewOptions = ['Personal', 'Dal Apartment 2B', 'CSCI 4177 Study Group', 'Weekend Trip'] as const
 const typeOptions = ['All', 'Expenses', 'Income'] as const
 
 interface ExportPreviewRow {
@@ -41,11 +40,10 @@ const formatCurrency = (value: number) =>
   `${value < 0 ? '-' : ''}$${Math.abs(value).toFixed(2)}`
 
 export default function ExportData() {
-  const [view, setView] = useState<(typeof viewOptions)[number]>('Personal')
   const [type, setType] = useState<(typeof typeOptions)[number]>('All')
   const [category, setCategory] = useState('All categories')
-  const [from, setFrom] = useState('2026-05-01')
-  const [to, setTo] = useState('2026-05-31')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [previewError, setPreviewError] = useState('')
@@ -58,13 +56,15 @@ export default function ExportData() {
     [preview.rows]
   )
 
-  const fetchPreview = async () => {
+  const fetchPreview = async (overrideType?: (typeof typeOptions)[number]) => {
     setIsPreviewLoading(true)
     setPreviewError('')
 
+    const effectiveType = overrideType ?? type
+
     try {
       const response = await api.post<ExportPreviewResponse>('/export/preview', {
-        type: type === 'All' ? 'all' : type === 'Income' ? 'income' : 'expense',
+        type: effectiveType === 'All' ? 'all' : effectiveType === 'Income' ? 'income' : 'expense',
         category: category === 'All categories' ? undefined : category,
         startDate: from || undefined,
         endDate: to || undefined,
@@ -151,13 +151,6 @@ export default function ExportData() {
         <h2 className="font-semibold text-gray-900 mb-4">Filters</h2>
 
         <div className="grid sm:grid-cols-2 gap-4 mb-4">
-          <Field label="View">
-            <select value={view} onChange={(event) => setView(event.target.value as typeof view)} className="input">
-              {viewOptions.map((option) => (
-                <option key={option}>{option}</option>
-              ))}
-            </select>
-          </Field>
           <Field label="Category">
             <select value={category} onChange={(event) => setCategory(event.target.value)} className="input">
               {availableCategories.map((option) => (
@@ -173,7 +166,10 @@ export default function ExportData() {
             {typeOptions.map((option) => (
               <button
                 key={option}
-                onClick={() => setType(option)}
+                onClick={() => {
+                  setType(option)
+                  void fetchPreview(option)
+                }}
                 className={`h-10 rounded-xl text-sm font-medium border ${
                   type === option ? 'bg-[#3D6B4F] text-white border-[#3D6B4F]' : 'border-gray-200 text-gray-600'
                 }`}
@@ -206,7 +202,7 @@ export default function ExportData() {
         </div>
 
         <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-          Export preview and CSV download read from your saved transaction history in PostgreSQL. The view selector is kept for UI continuity but does not change backend results on this page yet.
+          Export preview and CSV download reflect your saved personal transactions. Group export is not yet supported.
         </div>
       </div>
 
