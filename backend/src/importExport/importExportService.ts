@@ -15,7 +15,9 @@ import {
   SavedImportedTransaction,
 } from "./importExportModel.ts";
 import {
+  getAllGroupTransactionsForExport,
   getAllPersonalTransactionsForExport,
+  getGroupTransactionsForExport,
   getPersonalTransactionsForExport,
   insertImportedPersonalTransaction,
 } from "./importExportRepository.ts";
@@ -324,6 +326,41 @@ const escapeCsvValue = (value: string | number): string => {
     return `"${stringValue.replace(/"/g, '""')}"`;
   }
   return stringValue;
+};
+
+export const buildGroupExportPreview = async (
+  groupId: string,
+  filters: ExportPreviewInput
+) => {
+  const rows = await getGroupTransactionsForExport(groupId, filters);
+  const totalIncome = rows
+    .filter((row) => row.type === "income")
+    .reduce((sum, row) => sum + row.amount, 0);
+  const totalExpenses = rows
+    .filter((row) => row.type === "expense")
+    .reduce((sum, row) => sum + row.amount, 0);
+
+  const summary: ExportPreviewSummary = {
+    rowCount: rows.length,
+    totalIncome,
+    totalExpenses,
+    netAmount: totalIncome - totalExpenses,
+  };
+
+  return {
+    summary,
+    rows,
+  };
+};
+
+export const buildGroupExportCsv = async (groupId: string) => {
+  const rows = await getAllGroupTransactionsForExport(groupId);
+  const headerRow = EXPORT_HEADERS.join(",");
+  const csvRows = rows.map((row) =>
+    EXPORT_HEADERS.map((header) => escapeCsvValue(row[header])).join(",")
+  );
+
+  return [headerRow, ...csvRows].join("\n");
 };
 
 export const buildExportCsv = async (userId: string) => {

@@ -2,8 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import api from '../services/api'
+import { getGroups } from '../services/groupService'
+import type { GroupSummary } from '@expense-tracker/shared/groups'
 
 const typeOptions = ['All', 'Expenses', 'Income'] as const
+const PERSONAL_SCOPE = 'personal'
 
 interface ExportPreviewRow {
   id: string
@@ -40,6 +43,8 @@ const formatCurrency = (value: number) =>
   `${value < 0 ? '-' : ''}$${Math.abs(value).toFixed(2)}`
 
 export default function ExportData() {
+  const [scope, setScope] = useState(PERSONAL_SCOPE)
+  const [groups, setGroups] = useState<GroupSummary[]>([])
   const [type, setType] = useState<(typeof typeOptions)[number]>('All')
   const [category, setCategory] = useState('All categories')
   const [from, setFrom] = useState('')
@@ -51,19 +56,35 @@ export default function ExportData() {
   const [downloadSuccess, setDownloadSuccess] = useState('')
   const [preview, setPreview] = useState<ExportPreviewResponse>(emptyPreview)
 
+  useEffect(() => {
+    getGroups()
+      .then(setGroups)
+      .catch(() => {
+        // Group export is optional UI; a failed group list fetch shouldn't block personal export.
+      })
+  }, [])
+
   const availableCategories = useMemo(
     () => ['All categories', ...Array.from(new Set(preview.rows.map((row) => row.category)))],
     [preview.rows]
   )
 
-  const fetchPreview = async (overrideType?: (typeof typeOptions)[number]) => {
+  const fetchPreview = async (
+    overrideType?: (typeof typeOptions)[number],
+    overrideScope?: string
+  ) => {
     setIsPreviewLoading(true)
     setPreviewError('')
 
     const effectiveType = overrideType ?? type
+    const effectiveScope = overrideScope ?? scope
+    const endpoint =
+      effectiveScope === PERSONAL_SCOPE
+        ? '/export/preview'
+        : `/export/group/${effectiveScope}/preview`
 
     try {
-      const response = await api.post<ExportPreviewResponse>('/export/preview', {
+      const response = await api.post<ExportPreviewResponse>(endpoint, {
         type: effectiveType === 'All' ? 'all' : effectiveType === 'Income' ? 'income' : 'expense',
         category: category === 'All categories' ? undefined : category,
         startDate: from || undefined,
@@ -94,7 +115,9 @@ export default function ExportData() {
     setDownloadSuccess('')
 
     try {
-      const response = await api.get<Blob>('/export/csv', {
+      const endpoint =
+        scope === PERSONAL_SCOPE ? '/export/csv' : `/export/group/${scope}/csv`
+      const response = await api.get<Blob>(endpoint, {
         responseType: 'blob',
       })
 
@@ -102,7 +125,10 @@ export default function ExportData() {
       const downloadUrl = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = downloadUrl
-      link.download = 'personal-transactions-export.csv'
+      link.download =
+        scope === PERSONAL_SCOPE
+          ? 'personal-transactions-export.csv'
+          : 'group-transactions-export.csv'
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -151,6 +177,25 @@ export default function ExportData() {
         <h2 className="font-semibold text-gray-900 mb-4">Filters</h2>
 
         <div className="grid sm:grid-cols-2 gap-4 mb-4">
+          <Field label="View">
+            <select
+              value={scope}
+              onChange={(event) => {
+                const nextScope = event.target.value
+                setScope(nextScope)
+                setCategory('All categories')
+                void fetchPreview(undefined, nextScope)
+              }}
+              className="input"
+            >
+              <option value={PERSONAL_SCOPE}>Personal</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+          </Field>
           <Field label="Category">
             <select value={category} onChange={(event) => setCategory(event.target.value)} className="input">
               {availableCategories.map((option) => (
@@ -202,7 +247,7 @@ export default function ExportData() {
         </div>
 
         <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-          Export preview and CSV download reflect your saved personal transactions. Group export is not yet supported.
+          Export preview and CSV download reflect the selected view's saved transactions.
         </div>
       </div>
 

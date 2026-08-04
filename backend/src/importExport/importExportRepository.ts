@@ -6,15 +6,18 @@ import {
 } from "./importExportModel.ts";
 import { ExportPreviewInput } from "./importExportSchemas.ts";
 
-const mapTransactionRow = (row: {
-  id: string;
-  date: string | Date;
-  description: string | null;
-  amount: string | number;
-  type: "income" | "expense";
-  category: string | null;
-  createdAt: string | Date;
-}): ExportPreviewRow => ({
+const mapTransactionRow = (
+  row: {
+    id: string;
+    date: string | Date;
+    description: string | null;
+    amount: string | number;
+    type: "income" | "expense";
+    category: string | null;
+    createdAt: string | Date;
+  },
+  source: string
+): ExportPreviewRow => ({
   id: row.id,
   date:
     typeof row.date === "string"
@@ -24,7 +27,7 @@ const mapTransactionRow = (row: {
   amount: Number(row.amount),
   type: row.type,
   category: row.category ?? "Uncategorized",
-  source: "personal_transaction",
+  source,
   createdAt:
     typeof row.createdAt === "string"
       ? row.createdAt
@@ -148,7 +151,8 @@ export const getPersonalTransactionsForExport = async (
         type: "income" | "expense";
         category: string | null;
         createdAt: string | Date;
-      }
+      },
+      "personal_transaction"
     )
   );
 };
@@ -157,4 +161,70 @@ export const getAllPersonalTransactionsForExport = async (
   userId: string
 ): Promise<ExportPreviewRow[]> => {
   return getPersonalTransactionsForExport(userId, {});
+};
+
+export const getGroupTransactionsForExport = async (
+  groupId: string,
+  filters: ExportPreviewInput
+): Promise<ExportPreviewRow[]> => {
+  let query = `
+    SELECT
+      t.id,
+      t.transaction_date AS date,
+      t.description,
+      t.amount,
+      t.type,
+      c.name AS category,
+      t.created_at AS "createdAt"
+    FROM transactions t
+    LEFT JOIN categories c
+      ON t.category_id = c.id
+    WHERE t.group_id = $1
+  `;
+
+  const params: Array<string> = [groupId];
+
+  if (filters.type && filters.type !== "all") {
+    query += ` AND t.type = $${params.length + 1}`;
+    params.push(filters.type);
+  }
+
+  if (filters.category) {
+    query += ` AND LOWER(COALESCE(c.name, '')) = LOWER($${params.length + 1})`;
+    params.push(filters.category);
+  }
+
+  if (filters.startDate) {
+    query += ` AND t.transaction_date >= $${params.length + 1}`;
+    params.push(filters.startDate);
+  }
+
+  if (filters.endDate) {
+    query += ` AND t.transaction_date <= $${params.length + 1}`;
+    params.push(filters.endDate);
+  }
+
+  query += ` ORDER BY t.transaction_date DESC, t.created_at DESC`;
+
+  const result = await pool.query(query, params);
+  return result.rows.map((row) =>
+    mapTransactionRow(
+      row as {
+        id: string;
+        date: string | Date;
+        description: string | null;
+        amount: string | number;
+        type: "income" | "expense";
+        category: string | null;
+        createdAt: string | Date;
+      },
+      "group_transaction"
+    )
+  );
+};
+
+export const getAllGroupTransactionsForExport = async (
+  groupId: string
+): Promise<ExportPreviewRow[]> => {
+  return getGroupTransactionsForExport(groupId, {});
 };

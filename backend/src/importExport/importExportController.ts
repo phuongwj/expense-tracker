@@ -4,6 +4,8 @@ import { asyncHandler } from "../middleware/asyncHandler.ts";
 import {
   buildExportCsv,
   buildExportPreview,
+  buildGroupExportCsv,
+  buildGroupExportPreview,
   buildImportPreview,
   confirmImportRows,
 } from "./importExportService.ts";
@@ -89,6 +91,37 @@ export const exportCsv = asyncHandler(async (req: Request, res: Response) => {
   res.setHeader(
     "Content-Disposition",
     'attachment; filename="personal-transactions-export.csv"'
+  );
+
+  return res.status(200).send(csvContent);
+});
+
+export const previewGroupExport = asyncHandler(async (
+  req: Request<{ groupId: string }, {}, ExportPreviewInput>,
+  res: Response
+) => {
+  try {
+    const result = await buildGroupExportPreview(req.params.groupId, req.body);
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(400).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "Unable to generate group export preview.",
+    });
+  }
+});
+
+export const exportGroupCsv = asyncHandler(async (
+  req: Request<{ groupId: string }>,
+  res: Response
+) => {
+  const csvContent = await buildGroupExportCsv(req.params.groupId);
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader(
+    "Content-Disposition",
+    'attachment; filename="group-transactions-export.csv"'
   );
 
   return res.status(200).send(csvContent);
