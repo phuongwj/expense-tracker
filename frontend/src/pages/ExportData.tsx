@@ -42,6 +42,26 @@ const emptyPreview: ExportPreviewResponse = {
 const formatCurrency = (value: number) =>
   `${value < 0 ? '-' : ''}$${Math.abs(value).toFixed(2)}`
 
+const csvHeaders = ['date', 'description', 'amount', 'type', 'category', 'source', 'createdAt'] as const
+
+const escapeCsvValue = (value: string | number) => {
+  const stringValue = String(value)
+  if (/[",\n]/.test(stringValue)) {
+    return `"${stringValue.replace(/"/g, '""')}"`
+  }
+
+  return stringValue
+}
+
+const buildCsvContent = (rows: ExportPreviewRow[]) => {
+  const headerRow = csvHeaders.join(',')
+  const csvRows = rows.map((row) =>
+    csvHeaders.map((header) => escapeCsvValue(row[header])).join(',')
+  )
+
+  return [headerRow, ...csvRows].join('\n')
+}
+
 export default function ExportData() {
   const [scope, setScope] = useState(PERSONAL_SCOPE)
   const [groups, setGroups] = useState<GroupSummary[]>([])
@@ -55,6 +75,7 @@ export default function ExportData() {
   const [downloadError, setDownloadError] = useState('')
   const [downloadSuccess, setDownloadSuccess] = useState('')
   const [preview, setPreview] = useState<ExportPreviewResponse>(emptyPreview)
+  const [hasLoadedPreview, setHasLoadedPreview] = useState(false)
 
   useEffect(() => {
     getGroups()
@@ -68,6 +89,13 @@ export default function ExportData() {
     () => ['All categories', ...Array.from(new Set(preview.rows.map((row) => row.category)))],
     [preview.rows]
   )
+
+  const buildExportFilters = (selectedType: (typeof typeOptions)[number] = type) => ({
+    type: selectedType === 'All' ? 'all' : selectedType === 'Income' ? 'income' : 'expense',
+    category: category === 'All categories' ? undefined : category,
+    startDate: from || undefined,
+    endDate: to || undefined,
+  })
 
   const fetchPreview = async (
     overrideType?: (typeof typeOptions)[number],
@@ -84,14 +112,13 @@ export default function ExportData() {
         : `/export/group/${effectiveScope}/preview`
 
     try {
-      const response = await api.post<ExportPreviewResponse>(endpoint, {
-        type: effectiveType === 'All' ? 'all' : effectiveType === 'Income' ? 'income' : 'expense',
-        category: category === 'All categories' ? undefined : category,
-        startDate: from || undefined,
-        endDate: to || undefined,
-      })
+      const response = await api.post<ExportPreviewResponse>(
+        endpoint,
+        buildExportFilters(effectiveType)
+      )
 
       setPreview(response.data)
+      setHasLoadedPreview(true)
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { error?: string; message?: string } } }
       setPreviewError(
@@ -100,6 +127,7 @@ export default function ExportData() {
           'Unable to generate export preview right now.'
       )
       setPreview(emptyPreview)
+      setHasLoadedPreview(false)
     } finally {
       setIsPreviewLoading(false)
     }
@@ -115,13 +143,12 @@ export default function ExportData() {
     setDownloadSuccess('')
 
     try {
-      const endpoint =
-        scope === PERSONAL_SCOPE ? '/export/csv' : `/export/group/${scope}/csv`
-      const response = await api.get<Blob>(endpoint, {
-        responseType: 'blob',
-      })
+      if (!hasLoadedPreview) {
+        throw new Error('Refresh preview before downloading CSV.')
+      }
 
-      const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8' })
+      const csvContent = buildCsvContent(preview.rows)
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' })
       const downloadUrl = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = downloadUrl
@@ -133,10 +160,14 @@ export default function ExportData() {
       link.click()
       link.remove()
       window.URL.revokeObjectURL(downloadUrl)
-      setDownloadSuccess('CSV export downloaded successfully.')
+      setDownloadSuccess('CSV export downloaded from the current preview.')
     } catch (err: unknown) {
-      const apiError = err as { response?: { data?: { error?: string; message?: string } } }
+      const apiError = err as {
+        message?: string
+        response?: { data?: { error?: string; message?: string } }
+      }
       setDownloadError(
+        apiError.message ??
         apiError.response?.data?.error ??
           apiError.response?.data?.message ??
           'Unable to download CSV right now.'
@@ -309,7 +340,7 @@ export default function ExportData() {
         </button>
         <button
           onClick={() => void handleDownloadCsv()}
-          disabled={isDownloading || preview.summary.rowCount === 0}
+          disabled={isDownloading || isPreviewLoading || !hasLoadedPreview}
           className="h-11 px-6 rounded-xl bg-[#3D6B4F] text-white text-sm font-semibold hover:bg-[#2D5240] disabled:opacity-50"
         >
           {isDownloading ? 'Downloading...' : 'Download CSV'}
