@@ -36,7 +36,11 @@ const setRefreshCookie = (res: Response, token: string) => {
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,                                       // protects against XSS attacks by hiding cookie from client-side JS
     secure: process.env.NODE_ENV === 'production',        // enforces HTTPS connections (set to false only in local development)
-    sameSite: 'strict',                                   // protects against Cross-Site Request Forgery (CSRF)
+    // 'strict' locally (frontend/backend share the localhost site); 'none' in
+    // production since the frontend and backend live on different Render
+    // subdomains, which browsers treat as different sites. 'none' requires
+    // secure: true, which is already enforced above in production.
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
     path: '/api/auth',                                    // only sent to auth routes
     maxAge: REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000, // cookie lifespan
   });

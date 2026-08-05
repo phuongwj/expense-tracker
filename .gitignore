@@ -32,3 +32,6 @@ python-microservice/venv/
 python-microservice/.venv/
 python-microservice/app/__pycache__/
 __pycache__/
+
+# Local deployment notes, not for the shared repo
+DEPLOYMENT.md

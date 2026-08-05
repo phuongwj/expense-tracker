@@ -14,10 +14,12 @@ import groupRoutes from './groups/groupRoutes.ts';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const allowedOrigins = new Set([
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-]);
+const allowedOrigins = new Set(
+  (process.env.CORS_ORIGINS || "http://localhost:5173,http://127.0.0.1:5173")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+);
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
