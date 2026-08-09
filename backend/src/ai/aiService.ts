@@ -6,7 +6,7 @@ import {
   ReceiptExtractionRequestBody,
 } from "./aiSchemas.ts";
 
-const DEFAULT_TIMEOUT_MS = 5000;
+const DEFAULT_TIMEOUT_MS = 60000;
 const DEFAULT_AI_SERVICE_URL = "http://127.0.0.1:8000";
 
 export interface InsightsResponsePayload {

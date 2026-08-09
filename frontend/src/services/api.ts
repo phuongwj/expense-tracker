@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { showColdStartToast, dismissToast } from './toastBridge'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '/api'
 
@@ -13,7 +14,19 @@ export function setAccessToken(token: string | null) {
   accessToken = token
 }
 
-// REQUEST interceptor: attaches the JWT token and preserves browser-managed multipart headers.
+// Cold-start toast: Render's free instances spin down after 15 min idle and
+// take 30-50s+ to wake back up. These flags reset only on a full page
+// reload (intentional - that's exactly when a service may have gone cold
+// again since the last load).
+let hasWarnedBackend = false
+let hasWarnedAi = false
+
+const isAiRequest = (url?: string) =>
+  !!url && (url.includes('/ai/insights') || url.includes('/ai/extract-receipt'))
+
+// REQUEST interceptor: attaches the JWT token, preserves browser-managed
+// multipart headers, and shows a one-shot "waking up" toast for the first
+// backend call and the first AI-endpoint call of the session.
 api.interceptors.request.use(
   (config) => {
     const headers = config.headers ?? {}
@@ -30,6 +43,16 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${accessToken}`
     }
 
+    if (isAiRequest(config.url) && !hasWarnedAi) {
+      hasWarnedAi = true
+      ;(config as typeof config & { _toastId?: string | null })._toastId =
+        showColdStartToast('ai-cold')
+    } else if (!hasWarnedBackend) {
+      hasWarnedBackend = true
+      ;(config as typeof config & { _toastId?: string | null })._toastId =
+        showColdStartToast('backend-cold')
+    }
+
     return config
   },
   (error) => Promise.reject(error)
@@ -40,9 +63,13 @@ let refreshPromise: Promise<string | null> | null = null
 
 // RESPONSE interceptor: if token expires, retry once after refresh before redirecting.
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    dismissToast((response.config as typeof response.config & { _toastId?: string | null })._toastId)
+    return response
+  },
   async (error) => {
     const original = error.config
+    dismissToast(original?._toastId)
 
     if (error.response?.status === 401 && original && !original._retry) {
       original._retry = true
