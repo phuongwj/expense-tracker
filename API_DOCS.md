@@ -1182,7 +1182,7 @@ Same as `GET /api/export/csv`, but for a group's transactions — and with the s
 
 ## AI API (Backend Proxy)
 
-All endpoints are under `/api/ai` and require a valid access token. These endpoints don't generate AI output themselves — they build a request payload from the caller's own data and proxy it to the separate Python/FastAPI microservice (see [AI Microservice (Python/FastAPI)](#ai-microservice-pythonfastapi)) via `backend/src/ai/aiService.ts`, using `AI_SERVICE_URL` (default `http://127.0.0.1:8000`) with a 5-second timeout. The frontend only ever calls these backend routes — it never talks to the Python service directly.
+All endpoints are under `/api/ai` and require a valid access token. These endpoints don't generate AI output themselves — they build a request payload from the caller's own data and proxy it to the separate Python/FastAPI microservice (see [AI Microservice (Python/FastAPI)](#ai-microservice-pythonfastapi)) via `backend/src/ai/aiService.ts`, using `AI_SERVICE_URL` (default `http://127.0.0.1:8000`) with a 60-second timeout (`DEFAULT_TIMEOUT_MS`) — long enough to cover a cold-started microservice instance on Render's free tier waking up. The frontend only ever calls these backend routes — it never talks to the Python service directly. The frontend's `api.ts` also shows a one-shot "warming up" toast on the first backend request and the first AI request of a page load, so a slow cold-start response doesn't read as a hang.
 
 | Method | Endpoint                     | Description                                                      |
 | ------ | ------------------------------ | -------------------------------------------------------------------- |
@@ -1227,7 +1227,7 @@ All endpoints are under `/api/ai` and require a valid access token. These endpoi
 | Status | When                                                                                     |
 | ------ | --------------------------------------------------------------------------------------------- |
 | 401    | Not authenticated                                                                                |
-| 503    | Microservice unreachable, timed out (>5s), or returned a non-2xx status. Body: `{ "message": "...", "summarySent": {...} }` |
+| 503    | Microservice unreachable, timed out (>60s), or returned a non-2xx status. Body: `{ "message": "...", "summarySent": {...} }` |
 | 500    | Server error                                                                                      |
 
 **Note:** this endpoint only ever sends a **personal**-scope summary. `aiSchemas.ts` defines `groupInsightsSummarySchema` (`scope: "group"`) and the Python microservice's `/generate-insights` fully supports it, but nothing in the backend currently builds one or exposes a group-insights route — group-mode AI insights described in the project proposal are not wired up end-to-end yet.

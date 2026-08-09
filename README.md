@@ -5,6 +5,10 @@ shared expenses, split group costs and settle balances, import/export
 transactions as CSV, capture receipts with OCR-assisted extraction, and get
 AI-generated budgeting insights.
 
+**Live demo:** [Frontend URL](https://expense-tracker-app-7q38.onrender.com)
+
+> **Note:** Since the app is hosted on Render’s free tier, the first request after a period of inactivity may take up to a minute while the services wake up. A **“Warming up”** toast will appear while this happens — just wait a moment, no action is needed.
+
 ## Contents
 
 - [Overview](#overview)
