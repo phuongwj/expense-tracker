@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: expense_tracker
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - backend/.env
+    environment:
+      # Override the .env values so the backend talks to the other
+      # containers by service name instead of localhost.
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_DATABASE: expense_tracker
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/expense_tracker
+      AI_SERVICE_URL: http://python-microservice:8000
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Mount source for hot reload; node_modules stays the image's own.
+      - ./backend/src:/app/backend/src
+      - ./backend/migrations:/app/backend/migrations
+      - ./packages/shared/src:/app/packages/shared/src
+
+  python-microservice:
+    build:
+      context: python-microservice
+    env_file:
+      - python-microservice/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./python-microservice/app:/app/app
+
+volumes:
+  postgres-data:
