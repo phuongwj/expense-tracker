@@ -85,12 +85,12 @@ let refreshPromise: Promise<string | null> | null = null
 api.interceptors.response.use(
   (response) => {
     const tracked = response.config as typeof response.config & ColdStartConfig
-    dismissToast(tracked._toastId)
+    const wasWaiting = dismissToast(tracked._toastId)
 
-    // Only after a waking-up toast, so ordinary requests stay silent. The
-    // service demonstrably answered, so this is a real "it's ready", not a
-    // guess.
-    if (tracked._toastId && tracked._toastKind) {
+    // Only when a waking-up toast was actually seen. A warm backend settles
+    // inside the toast's delay, so nothing was ever shown and there is
+    // nothing to reassure the user about.
+    if (wasWaiting && tracked._toastKind) {
       showToast(READY_TOAST_FOR[tracked._toastKind])
     }
 
