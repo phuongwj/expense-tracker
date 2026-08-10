@@ -1182,12 +1182,34 @@ Same as `GET /api/export/csv`, but for a group's transactions — and with the s
 
 ## AI API (Backend Proxy)
 
-All endpoints are under `/api/ai` and require a valid access token. These endpoints don't generate AI output themselves — they build a request payload from the caller's own data and proxy it to the separate Python/FastAPI microservice (see [AI Microservice (Python/FastAPI)](#ai-microservice-pythonfastapi)) via `backend/src/ai/aiService.ts`, using `AI_SERVICE_URL` (default `http://127.0.0.1:8000`) with a 60-second timeout (`DEFAULT_TIMEOUT_MS`) — long enough to cover a cold-started microservice instance on Render's free tier waking up. The frontend only ever calls these backend routes — it never talks to the Python service directly. The frontend's `api.ts` also shows a one-shot "warming up" toast on the first backend request and the first AI request of a page load, so a slow cold-start response doesn't read as a hang.
+All endpoints are under `/api/ai`. `/insights` and `/extract-receipt` require a valid access token; `/warmup` deliberately does not (see below). These endpoints don't generate AI output themselves — they build a request payload from the caller's own data and proxy it to the separate Python/FastAPI microservice (see [AI Microservice (Python/FastAPI)](#ai-microservice-pythonfastapi)) via `backend/src/ai/aiService.ts`, using `AI_SERVICE_URL` (default `http://127.0.0.1:8000`). The frontend only ever calls these backend routes — it never talks to the Python service directly.
+
+**Cold-start handling:** the Python microservice runs on Render's free tier and spins down after ~15 minutes idle, so the backend builds in both a warm-up path and retry logic:
+- Each `/insights`/`/extract-receipt` call has a 90-second total budget (`DEFAULT_TIMEOUT_MS`) covering the whole call *including retries*, not per attempt.
+- `fetchThroughColdStart` in `aiService.ts` retries up to 2 times (3 attempts total, 6s apart) when the microservice is unreachable or returns `502`/`503`/`504` — the shape of a Render router response while the instance is still booting. A genuine 401/400/etc. from the microservice itself is not retried.
+- `warmUpAiService()` (also in `aiService.ts`) fire-and-forget pings the microservice's `GET /health` with its own 90s timeout, deduplicated so concurrent callers share one in-flight ping. The frontend triggers this on app load (`App.tsx`) and again on the Smart Scan page mount, via `POST /api/ai/warmup` below — so the instance is often already awake by the time a user reaches AI Insights or Smart Scan, rather than only starting to wake on their first real request.
+- The frontend also shows a "warming up" toast on the first backend request and first AI request of a page load, replaced with a "ready" success toast once that request resolves (`frontend/src/services/api.ts`, `toastBridge.ts`, `ToastContext.tsx`).
 
 | Method | Endpoint                     | Description                                                      |
 | ------ | ------------------------------ | -------------------------------------------------------------------- |
+| POST   | `/api/ai/warmup`                | Fire-and-forget ping to wake up the AI microservice early            |
 | POST   | `/api/ai/insights`              | Build a personal financial summary and get back budgeting insights   |
 | POST   | `/api/ai/extract-receipt`       | Send a receipt image (or mock fields) and get back a draft transaction |
+
+### POST `/api/ai/warmup`
+
+**Auth:** none required — intentional, so it's callable from the login screen (before the user has a token) to start booting the AI instance as early as possible.
+
+**Request body:** none.
+
+**Behavior:** calls `warmUpAiService()`, which pings the microservice's `GET /health`, and returns immediately without waiting for that ping to resolve. Takes no input and returns no meaningful data — its only purpose is the side effect of waking the microservice.
+
+**Success (202):**
+```json
+{ "status": "warming" }
+```
+
+There are no documented error responses — it always returns 202 regardless of whether the underlying ping succeeds.
 
 ### POST `/api/ai/insights`
 
@@ -1227,7 +1249,7 @@ All endpoints are under `/api/ai` and require a valid access token. These endpoi
 | Status | When                                                                                     |
 | ------ | --------------------------------------------------------------------------------------------- |
 | 401    | Not authenticated                                                                                |
-| 503    | Microservice unreachable, timed out (>60s), or returned a non-2xx status. Body: `{ "message": "...", "summarySent": {...} }` |
+| 503    | Microservice still unreachable/erroring after cold-start retries, or the 90s budget ran out. Body: `{ "message": "...", "summarySent": {...} }` |
 | 500    | Server error                                                                                      |
 
 **Note:** this endpoint only ever sends a **personal**-scope summary. `aiSchemas.ts` defines `groupInsightsSummarySchema` (`scope: "group"`) and the Python microservice's `/generate-insights` fully supports it, but nothing in the backend currently builds one or exposes a group-insights route — group-mode AI insights described in the project proposal are not wired up end-to-end yet.
@@ -1271,7 +1293,7 @@ Two ways to call it:
 | ------ | --------------------------------------------------------------------------------------------------- |
 | 400    | Unsupported file mimetype; empty file; validation failed on the no-file JSON path (with `fields`)  |
 | 401    | Not authenticated                                                                                     |
-| 503    | Microservice unreachable, timed out, or errored. Body: `{ "message": "...", "receiptRequest": { "fileName", "mimeType", "documentType" } }` |
+| 503    | Microservice still unreachable/erroring after cold-start retries, or the 90s budget ran out. Body: `{ "message": "...", "receiptRequest": { "fileName", "mimeType", "documentType" } }` |
 | 500    | Server error                                                                                           |
 
 ---

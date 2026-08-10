@@ -147,3 +147,13 @@ HTTP (`AI_SERVICE_URL`) — the frontend never talks to it directly. See
 shapes, and Groq fallback behavior, and
 [API_DOCS.md's AI API (Backend Proxy)](API_DOCS.md#ai-api-backend-proxy)
 section for how the backend forwards requests to it.
+
+**Cold starts:** it runs on Render's free tier, which spins the instance
+down after ~15 min idle, so `aiService.ts` treats a cold instance as an
+expected case rather than a failure — `fetchThroughColdStart` retries an
+`/insights`/`/extract-receipt` call up to twice (3 attempts, 6s apart) on
+`502`/`503`/`504`/unreachable, within a 90s total budget. There's also a
+dedicated `POST /api/ai/warmup` route (unauthenticated, fire-and-forget)
+that just pings the microservice's `/health` to start it booting before a
+real request needs it — see [Frontend](#frontend) above for where that
+gets called from.
