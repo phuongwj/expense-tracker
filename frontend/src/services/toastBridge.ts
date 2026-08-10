@@ -3,7 +3,15 @@
 // React directly; it just calls these functions, which are no-ops until
 // ToastProvider registers itself on mount.
 
-export type ToastKind = 'backend-cold' | 'ai-cold'
+export type ToastKind = 'backend-cold' | 'ai-cold' | 'backend-ready' | 'ai-ready'
+
+// The success toast that replaces each waking-up toast once the service
+// answers, so the spinner resolves into an explicit "it worked" instead of
+// just disappearing.
+export const READY_TOAST_FOR: Record<'backend-cold' | 'ai-cold', ToastKind> = {
+  'backend-cold': 'backend-ready',
+  'ai-cold': 'ai-ready',
+}
 
 type ShowHandler = (kind: ToastKind, id: string) => void
 type DismissHandler = (id: string) => void
@@ -16,7 +24,7 @@ export function registerToastHandlers(show: ShowHandler, dismiss: DismissHandler
   dismissHandler = dismiss
 }
 
-export function showColdStartToast(kind: ToastKind): string | null {
+export function showToast(kind: ToastKind): string | null {
   if (!showHandler) return null
 
   const id = crypto.randomUUID()
