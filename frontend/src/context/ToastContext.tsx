@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import Toast, { type ToastItem, type ToastTone } from '../components/Toast'
 import { registerToastHandlers, type ToastKind } from '../services/toastBridge'
 
@@ -32,18 +32,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
 
+  // Hoisted out of the effect so the close button can call it too.
+  const remove = useCallback((id: string) => {
+    const timer = timers.current.get(id)
+    if (timer) {
+      clearTimeout(timer)
+      timers.current.delete(id)
+    }
+
+    setToasts((current) => current.filter((toast) => toast.id !== id))
+  }, [])
+
   useEffect(() => {
     const timersOnMount = timers.current
-
-    const remove = (id: string) => {
-      const timer = timersOnMount.get(id)
-      if (timer) {
-        clearTimeout(timer)
-        timersOnMount.delete(id)
-      }
-
-      setToasts((current) => current.filter((toast) => toast.id !== id))
-    }
 
     registerToastHandlers((kind, id) => {
       const { message, tone, durationMs } = TOASTS[kind]
@@ -77,14 +78,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       timersOnMount.forEach(clearTimeout)
       timersOnMount.clear()
     }
-  }, [])
+  }, [remove])
 
   return (
     <>
       {children}
       <div className="fixed top-4 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2">
         {toasts.map((toast) => (
-          <Toast key={toast.id} {...toast} />
+          <Toast key={toast.id} {...toast} onDismiss={() => remove(toast.id)} />
         ))}
       </div>
     </>
