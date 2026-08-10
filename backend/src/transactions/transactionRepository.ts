@@ -250,22 +250,29 @@ export const insertTransactionSplits = async (
     transactionId: string,
     splits: { userId: string; amount: number }[]
 ): Promise<TransactionSplit[]> => {
-    const splitsAdded: TransactionSplit[] = [];
+    const values: unknown[] = [];
+    const placeholders: string[] = [];
 
-    for (const split of splits) {
-        const result = await pool.query(
-            `INSERT INTO transaction_splits (transaction_id, user_id, amount) VALUES ($1, $2, $3)
-            RETURNING 
-                id,
-                transaction_id AS "transactionId",
-                user_id AS "userId",
-                amount
-            `,
-            [transactionId, split.userId, split.amount]
-        );
-        splitsAdded.push(result.rows[0]);
-    }
-    return splitsAdded;
+    splits.forEach((split, i) => {
+        //offset+1 gives the parameter insertion spot for the first
+        //parameter of each split.
+        const offset = i * 3;
+        placeholders.push(`($${offset + 1}, $${offset + 2}, $${offset + 3})`);
+        values.push(transactionId, split.userId, split.amount);
+    });
+
+    const query = `
+        INSERT INTO transaction_splits (transaction_id, user_id, amount)
+        VALUES ${placeholders.join(', ')}
+        RETURNING
+            id,
+            transaction_id AS "transactionId",
+            user_id AS "userId",
+            amount
+    `;
+
+    const result = await pool.query(query, values);
+    return result.rows;
 }
 
 /**
