@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import express from "express";
+import helmet from "helmet";
 import cors from "cors";
 import aiRoutes from "./ai/aiRoutes.ts";
 import cookieParser from "cookie-parser";
@@ -21,6 +22,8 @@ const allowedOrigins = new Set(
     .filter(Boolean)
 );
 
+app.use(helmet());
+
 app.use((req, res, next) => {
   const origin = req.headers.origin;
 
@@ -38,6 +41,8 @@ app.use((req, res, next) => {
 
   next();
 });
+
+
 
 app.use(cors({
   origin: (origin, callback) => {
