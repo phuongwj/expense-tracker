@@ -14,7 +14,8 @@ export const READY_TOAST_FOR: Record<'backend-cold' | 'ai-cold', ToastKind> = {
 }
 
 type ShowHandler = (kind: ToastKind, id: string) => void
-type DismissHandler = (id: string) => void
+// Returns whether the toast had actually become visible.
+type DismissHandler = (id: string) => boolean
 
 let showHandler: ShowHandler | null = null
 let dismissHandler: DismissHandler | null = null
@@ -32,6 +33,9 @@ export function showToast(kind: ToastKind): string | null {
   return id
 }
 
-export function dismissToast(id: string | null | undefined) {
-  if (id) dismissHandler?.(id)
+// True only if the toast was on screen, so callers can tell a real wait from
+// one that resolved before anything was ever shown.
+export function dismissToast(id: string | null | undefined): boolean {
+  if (!id) return false
+  return dismissHandler?.(id) ?? false
 }

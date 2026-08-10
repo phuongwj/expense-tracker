@@ -29,6 +29,11 @@ type ColdStartConfig = {
 const isAiRequest = (url?: string) =>
   !!url && (url.includes('/ai/insights') || url.includes('/ai/extract-receipt'))
 
+// Background housekeeping the user never initiated: it must not claim the
+// one-shot backend toast, and its fast 202 must not announce "all set"
+// while the AI service is in fact still booting.
+const isBackgroundRequest = (url?: string) => !!url && url.includes('/ai/warmup')
+
 // REQUEST interceptor: attaches the JWT token, preserves browser-managed
 // multipart headers, and shows a one-shot "waking up" toast for the first
 // backend call and the first AI-endpoint call of the session.
@@ -48,8 +53,9 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${accessToken}`
     }
 
-    const kind =
-      isAiRequest(config.url) && !hasWarnedAi
+    const kind = isBackgroundRequest(config.url)
+      ? null
+      : isAiRequest(config.url) && !hasWarnedAi
         ? 'ai-cold'
         : !hasWarnedBackend
           ? 'backend-cold'
@@ -79,14 +85,19 @@ let refreshPromise: Promise<string | null> | null = null
 api.interceptors.response.use(
   (response) => {
     const tracked = response.config as typeof response.config & ColdStartConfig
-    dismissToast(tracked._toastId)
+    const wasWaiting = dismissToast(tracked._toastId)
 
-    // Only after a waking-up toast, so ordinary requests stay silent. The
-    // service demonstrably answered, so this is a real "it's ready", not a
-    // guess.
-    if (tracked._toastId && tracked._toastKind) {
+    // Only when a waking-up toast was actually seen. A warm backend settles
+    // inside the toast's delay, so nothing was ever shown and there is
+    // nothing to reassure the user about.
+    if (wasWaiting && tracked._toastKind) {
       showToast(READY_TOAST_FOR[tracked._toastKind])
     }
+
+    // A 401 retry re-sends this same config object, so clear the markers or
+    // the retry fires a second success toast.
+    tracked._toastId = null
+    delete tracked._toastKind
 
     return response
   },
