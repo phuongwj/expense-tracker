@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { categories } from '../data/mockData'
 import api from '../services/api'
+import { warmUpAiService } from '../services/aiWarmup'
 
 const steps = [
   { n: 1, title: 'Upload', sub: 'Photo or image of your receipt' },
@@ -96,6 +97,12 @@ const isValidIsoDate = (value: string) => {
 }
 
 export default function SmartScan() {
+  // Receipt extraction hits the same (possibly cold) AI microservice, so
+  // start waking it while the user is still picking a file.
+  useEffect(() => {
+    warmUpAiService()
+  }, [])
+
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploaded, setUploaded] = useState(false)
