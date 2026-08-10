@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { showColdStartToast, dismissToast } from './toastBridge'
+import { showToast, dismissToast, READY_TOAST_FOR } from './toastBridge'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '/api'
 
@@ -20,6 +20,11 @@ export function setAccessToken(token: string | null) {
 // again since the last load).
 let hasWarnedBackend = false
 let hasWarnedAi = false
+
+type ColdStartConfig = {
+  _toastId?: string | null
+  _toastKind?: 'backend-cold' | 'ai-cold'
+}
 
 const isAiRequest = (url?: string) =>
   !!url && (url.includes('/ai/insights') || url.includes('/ai/extract-receipt'))
@@ -43,14 +48,23 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${accessToken}`
     }
 
-    if (isAiRequest(config.url) && !hasWarnedAi) {
+    const kind =
+      isAiRequest(config.url) && !hasWarnedAi
+        ? 'ai-cold'
+        : !hasWarnedBackend
+          ? 'backend-cold'
+          : null
+
+    if (kind === 'ai-cold') {
       hasWarnedAi = true
-      ;(config as typeof config & { _toastId?: string | null })._toastId =
-        showColdStartToast('ai-cold')
-    } else if (!hasWarnedBackend) {
+    } else if (kind === 'backend-cold') {
       hasWarnedBackend = true
-      ;(config as typeof config & { _toastId?: string | null })._toastId =
-        showColdStartToast('backend-cold')
+    }
+
+    if (kind) {
+      const tracked = config as ColdStartConfig
+      tracked._toastId = showToast(kind)
+      tracked._toastKind = kind
     }
 
     return config
@@ -64,7 +78,16 @@ let refreshPromise: Promise<string | null> | null = null
 // RESPONSE interceptor: if token expires, retry once after refresh before redirecting.
 api.interceptors.response.use(
   (response) => {
-    dismissToast((response.config as typeof response.config & { _toastId?: string | null })._toastId)
+    const tracked = response.config as typeof response.config & ColdStartConfig
+    dismissToast(tracked._toastId)
+
+    // Only after a waking-up toast, so ordinary requests stay silent. The
+    // service demonstrably answered, so this is a real "it's ready", not a
+    // guess.
+    if (tracked._toastId && tracked._toastKind) {
+      showToast(READY_TOAST_FOR[tracked._toastKind])
+    }
+
     return response
   },
   async (error) => {

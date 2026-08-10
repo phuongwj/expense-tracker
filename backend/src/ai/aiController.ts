@@ -9,6 +9,7 @@ import {
   buildUploadedReceiptPayload,
   postInsightsRequest,
   postReceiptExtractionRequest,
+  warmUpAiService,
 } from "./aiService.ts";
 import {
   receiptExtractionMultipartFieldsSchema,
@@ -35,6 +36,16 @@ const buildValidationFields = (
 
   return fields;
 };
+
+/**
+ * Kicks off the microservice wake-up and returns immediately. The frontend
+ * calls this on load so the (free-tier, spun-down) AI instance is already
+ * booting by the time the user opens AI Insights or Smart Scan.
+ */
+export const warmUpAi = asyncHandler(async (_req: Request, res: Response) => {
+  void warmUpAiService();
+  return res.status(202).json({ status: "warming" });
+});
 
 export const generateInsights = asyncHandler(
   async (req: Request, res: Response) => {

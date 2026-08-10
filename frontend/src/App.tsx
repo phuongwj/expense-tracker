@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
+import { warmUpAiService } from './services/aiWarmup'
 import { ToastProvider } from './context/ToastContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import Signup from './pages/Signup'
@@ -18,6 +20,12 @@ import Settings from './pages/Settings'
 import Help from './pages/Help'
 
 export default function App() {
+  // Start booting the AI microservice as soon as the app loads, so it is
+  // awake by the time the user reaches AI Insights or Smart Scan.
+  useEffect(() => {
+    warmUpAiService()
+  }, [])
+
   return (
     <ToastProvider>
       <AuthProvider>
