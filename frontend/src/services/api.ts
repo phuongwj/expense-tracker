@@ -29,6 +29,11 @@ type ColdStartConfig = {
 const isAiRequest = (url?: string) =>
   !!url && (url.includes('/ai/insights') || url.includes('/ai/extract-receipt'))
 
+// Background housekeeping the user never initiated: it must not claim the
+// one-shot backend toast, and its fast 202 must not announce "all set"
+// while the AI service is in fact still booting.
+const isBackgroundRequest = (url?: string) => !!url && url.includes('/ai/warmup')
+
 // REQUEST interceptor: attaches the JWT token, preserves browser-managed
 // multipart headers, and shows a one-shot "waking up" toast for the first
 // backend call and the first AI-endpoint call of the session.
@@ -48,8 +53,9 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${accessToken}`
     }
 
-    const kind =
-      isAiRequest(config.url) && !hasWarnedAi
+    const kind = isBackgroundRequest(config.url)
+      ? null
+      : isAiRequest(config.url) && !hasWarnedAi
         ? 'ai-cold'
         : !hasWarnedBackend
           ? 'backend-cold'
@@ -87,6 +93,11 @@ api.interceptors.response.use(
     if (tracked._toastId && tracked._toastKind) {
       showToast(READY_TOAST_FOR[tracked._toastKind])
     }
+
+    // A 401 retry re-sends this same config object, so clear the markers or
+    // the retry fires a second success toast.
+    tracked._toastId = null
+    delete tracked._toastKind
 
     return response
   },

@@ -48,7 +48,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     registerToastHandlers((kind, id) => {
       const { message, tone, durationMs } = TOASTS[kind]
 
-      setToasts((current) => [...current, { id, message, tone }])
+      // Only one toast at a time. A lingering success toast is stale the
+      // moment anything else starts, and stacking a yellow "warming up"
+      // under a green "you are all set" reads as a contradiction.
+      setToasts((current) => {
+        current
+          .filter((toast) => toast.tone === 'success')
+          .forEach((toast) => {
+            const timer = timersOnMount.get(toast.id)
+            if (timer) {
+              clearTimeout(timer)
+              timersOnMount.delete(toast.id)
+            }
+          })
+
+        return [...current.filter((toast) => toast.tone !== 'success'), { id, message, tone }]
+      })
 
       if (durationMs) {
         timersOnMount.set(
