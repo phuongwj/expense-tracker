@@ -77,15 +77,18 @@ export const listGroups = asyncHandler (async (req: Request, res: Response) => {
 export const getGroup = asyncHandler (async (req: Request, res: Response) => {
     const { id } = (req as any).validatedParams;
 
-    const group = await findGroupById(id);
-    const membership = await findMembership(id, req.userId!);
+    //These three lookups don't depend on each other, so they're issued together
+    //and the request waits on the slowest one rather than the sum of all three.
+    const [group, membership, members] = await Promise.all([
+        findGroupById(id),
+        findMembership(id, req.userId!),
+        findGroupMembers(id),
+    ]);
 
-    //returning 404 for non-members to avoid exposing information about existing group IDs 
+    //returning 404 for non-members to avoid exposing information about existing group IDs
     if (!group || !membership) {
         throw new NotFoundError("We couldn't find that group, please contact the group leader if you believe this is a mistake.");
     }
-
-    const members = await findGroupMembers(id);
 
     const response: any = {
         group: {
@@ -107,10 +110,12 @@ export const getGroup = asyncHandler (async (req: Request, res: Response) => {
 export const regenerateCode = asyncHandler (async (req: Request, res: Response) => {
     const { id } = (req as any).validatedParams;
 
-    const group = await findGroupById(id);
-    const membership = await findMembership(id, req.userId!);
+    const [group, membership] = await Promise.all([
+        findGroupById(id),
+        findMembership(id, req.userId!),
+    ]);
 
-    //returning 404 for non-members to avoid exposing information about existing group IDs 
+    //returning 404 for non-members to avoid exposing information about existing group IDs
     if (!group || !membership) {
         throw new NotFoundError("We couldn't find that group, please contact the group leader if you believe this is a mistake.");
     }
@@ -128,7 +133,10 @@ export const regenerateCode = asyncHandler (async (req: Request, res: Response) 
 export const removeMember = asyncHandler (async (req: Request, res: Response) => {
     const { id: groupId, userId: targetUserId } = (req as any).validatedParams;
 
-    const requesterMembership = await findMembership(groupId, req.userId!);
+    const [requesterMembership, targetMembership] = await Promise.all([
+        findMembership(groupId, req.userId!),
+        findMembership(groupId, targetUserId),
+    ]);
 
     //returning 404 to non-members to avoid exposing IDs of existing groups
     if (!requesterMembership) {
@@ -140,8 +148,6 @@ export const removeMember = asyncHandler (async (req: Request, res: Response) =>
     if (!isSelfRemoval && requesterMembership.role !== 'leader') {
         throw new ForbiddenError("Only the group leader can remove other members.");
     }
-
-    const targetMembership = await findMembership(groupId, targetUserId);
 
     if (!targetMembership) {
         throw new NotFoundError("Member not found in group, please refresh the page to ensure member list is up to date.");

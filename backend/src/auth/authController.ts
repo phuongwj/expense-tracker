@@ -117,11 +117,14 @@ export const logIn = asyncHandler(async (req: Request<{}, {}, LoginInput>, res: 
       throw new UnauthorizedError('Incorrect email or password. Please double-check your credentials and try again.');
   }
 
-  const { accessToken, refreshToken } = await issueTokenPair(user.id);
-  setRefreshCookie(res, refreshToken);
+  //Issuing the token pair and catching up any past-due recurring transactions are
+  //independent of each other, so both are started together instead of in sequence.
+  const [{ accessToken, refreshToken }, recurringProcessed] = await Promise.all([
+    issueTokenPair(user.id),
+    processRecurringTransactionsForOwner(user.id),
+  ]);
 
-  //if user has recurring transactions that are past due, create them now and return the number of created transactions.
-  const recurringProcessed = await processRecurringTransactionsForOwner(user.id);
+  setRefreshCookie(res, refreshToken);
 
   return res.status(200).json({
     message: 'Logged in successfully.',
