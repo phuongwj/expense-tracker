@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Layout from '../components/Layout'
 import api from '../services/api'
+import { warmUpAiService } from '../services/aiWarmup'
 
 interface InsightsPayload {
   summary: string
@@ -79,6 +80,10 @@ export default function AIInsights() {
   }
 
   useEffect(() => {
+    // Landing straight on this page is the worst case for a cold instance:
+    // the insights request fires immediately. Ping alongside it so a boot is
+    // already under way if this request has to give up.
+    void warmUpAiService()
     void fetchInsights()
   }, [])
 

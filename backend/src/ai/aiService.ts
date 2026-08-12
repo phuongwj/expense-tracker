@@ -6,17 +6,27 @@ import {
   ReceiptExtractionRequestBody,
 } from "./aiSchemas.ts";
 
-// Total budget for one AI call *including* cold-start retries, not per attempt.
+// Total budget for one user-facing AI call *including* cold-start retries,
+// not per attempt. Kept under Render's ~100s router idle timeout.
 const DEFAULT_TIMEOUT_MS = 90000;
 const DEFAULT_AI_SERVICE_URL = "http://127.0.0.1:8000";
 
-// Render's free instances spin down after 15 min idle. The first request
-// after that either hangs while the instance boots or is rejected by
-// Render's router with a 502/503/504 - so a single attempt is not enough.
-const COLD_START_RETRIES = 2;
+// Render's free instances spin down after 15 min idle. While one boots, the
+// router rejects requests with an *immediate* 502/503/504 rather than
+// holding them - so retrying matters far less than retrying for long enough.
+// A boot regularly runs past a minute, which is why a handful of retries a
+// few seconds apart never caught it.
 const COLD_START_RETRY_DELAY_MS = 6000;
-const WARMUP_TIMEOUT_MS = 90000;
 const COLD_START_STATUSES = new Set([502, 503, 504]);
+
+// Nobody is waiting on the warm-up response, so it can afford to sit through
+// a full boot instead of giving up while the instance is still starting.
+const WARMUP_TIMEOUT_MS = 240000;
+
+// A "warm" reading goes stale once Render spins the instance back down.
+// Expiring it early means the next page load re-pings instead of trusting a
+// reading from before the shutdown.
+const WARM_STATE_TTL_MS = 600000;
 
 const delay = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -24,47 +34,72 @@ const delay = (ms: number) =>
 const getAiServiceBaseUrl = () =>
   process.env.AI_SERVICE_URL || DEFAULT_AI_SERVICE_URL;
 
+interface ColdStartOptions {
+  budgetMs: number;
+  label: string;
+}
+
 /**
  * Performs `attempt` and retries while the microservice looks cold
- * (connection refused/reset, or a Render router 5xx). Returns the last
- * response even if it still failed, so callers keep their existing
- * error-mapping behaviour.
+ * (connection refused/reset, or a Render router 5xx) until `budgetMs` is
+ * spent. Returns the last response even if it still failed, so callers keep
+ * their existing error-mapping behaviour.
+ *
+ * Each attempt gets its own AbortController: a single shared one stays
+ * aborted once it fires, so the first timeout would poison every retry after
+ * it. `budgetMs` is what bounds the sequence as a whole.
  */
 const fetchThroughColdStart = async (
-  attempt: () => Promise<Response>
+  attempt: (signal: AbortSignal) => Promise<Response>,
+  { budgetMs, label }: ColdStartOptions
 ): Promise<Response> => {
-  let lastError: unknown;
+  const deadline = Date.now() + budgetMs;
+  let attemptNumber = 0;
 
-  for (let tries = 0; tries <= COLD_START_RETRIES; tries += 1) {
+  // Retrying is pointless once there is no room left for the round trip that
+  // would follow the wait.
+  const outOfBudget = () => deadline - Date.now() <= COLD_START_RETRY_DELAY_MS;
+
+  for (;;) {
+    attemptNumber += 1;
+
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(),
+      Math.max(deadline - Date.now(), 1)
+    );
+
     try {
-      const response = await attempt();
+      const response = await attempt(controller.signal);
 
-      if (!COLD_START_STATUSES.has(response.status) || tries === COLD_START_RETRIES) {
+      if (!COLD_START_STATUSES.has(response.status) || outOfBudget()) {
         return response;
       }
 
       console.warn(
-        `[ai] microservice returned ${response.status} (likely cold start), retrying...`
+        `[ai] ${label}: microservice returned ${response.status} on attempt ` +
+          `${attemptNumber} (likely cold start), retrying...`
       );
     } catch (error) {
-      // An abort is the caller's timeout, not a cold start - give up.
-      if (error instanceof Error && error.name === "AbortError") {
+      // The only thing that aborts this attempt is its own timer, which is
+      // set to whatever is left of the budget - so there is nothing to retry.
+      const isAbortError = error instanceof Error && error.name === "AbortError";
+
+      if (isAbortError || outOfBudget()) {
         throw error;
       }
 
-      lastError = error;
-
-      if (tries === COLD_START_RETRIES) {
-        throw error;
-      }
-
-      console.warn("[ai] microservice unreachable (likely cold start), retrying...");
+      console.warn(
+        `[ai] ${label}: microservice unreachable on attempt ${attemptNumber} ` +
+          `(likely cold start), retrying...`,
+        error instanceof Error ? error.message : error
+      );
+    } finally {
+      clearTimeout(timer);
     }
 
     await delay(COLD_START_RETRY_DELAY_MS);
   }
-
-  throw lastError;
 };
 
 /**
@@ -72,22 +107,52 @@ const fetchThroughColdStart = async (
  * still browsing, instead of on their first AI request. Deduplicated so a
  * burst of page loads only triggers one in-flight ping.
  */
+export type AiWarmState = "cold" | "warming" | "warm" | "unavailable";
+
 let warmUpInFlight: Promise<boolean> | null = null;
+let warmState: AiWarmState = "cold";
+let warmedAt = 0;
+
+export const getAiWarmState = (): AiWarmState => {
+  if (warmState === "warm" && Date.now() - warmedAt > WARM_STATE_TTL_MS) {
+    warmState = "cold";
+  }
+
+  return warmState;
+};
 
 const pingAiService = async (): Promise<boolean> => {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), WARMUP_TIMEOUT_MS);
-
   try {
-    const response = await fetch(`${getAiServiceBaseUrl()}/health`, {
-      signal: controller.signal,
-    });
+    // The whole point of the warm-up is to survive a boot, so it retries
+    // through cold-start 5xx exactly like a real AI call does - the previous
+    // version fired one bare fetch and swallowed the instant 503, which made
+    // it a no-op in precisely the case it existed for.
+    const response = await fetchThroughColdStart(
+      (signal) => fetch(`${getAiServiceBaseUrl()}/health`, { signal }),
+      { budgetMs: WARMUP_TIMEOUT_MS, label: "warm-up" }
+    );
+
+    if (response.ok) {
+      warmState = "warm";
+      warmedAt = Date.now();
+    } else {
+      warmState = "unavailable";
+    }
+
+    console.info(
+      `[ai] warm-up finished: /health responded ${response.status} -> ${warmState}`
+    );
 
     return response.ok;
-  } catch {
+  } catch (error) {
+    warmState = "unavailable";
+    console.warn(
+      "[ai] warm-up gave up:",
+      error instanceof Error ? error.message : error
+    );
+
     return false;
   } finally {
-    clearTimeout(timeout);
     warmUpInFlight = null;
   }
 };
@@ -95,6 +160,10 @@ const pingAiService = async (): Promise<boolean> => {
 export const warmUpAiService = (): Promise<boolean> => {
   if (warmUpInFlight) {
     return warmUpInFlight;
+  }
+
+  if (getAiWarmState() !== "warm") {
+    warmState = "warming";
   }
 
   // Assigned synchronously: pingAiService suspends at its first `await`, so
@@ -235,20 +304,22 @@ export const postInsightsRequest = async (
   payload: InsightsSummary
 ): Promise<AiServiceResult> => {
   const baseUrl = getAiServiceBaseUrl();
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
 
   try {
-    const response = await fetchThroughColdStart(() =>
-      fetch(`${baseUrl}/generate-insights`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      })
+    const response = await fetchThroughColdStart(
+      (signal) =>
+        fetch(`${baseUrl}/generate-insights`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+          signal,
+        }),
+      { budgetMs: DEFAULT_TIMEOUT_MS, label: "insights" }
     );
+
+    console.info("[aiService] python insights response status:", response.status);
 
     const body = await parseJsonResponse<InsightsResponsePayload | { message?: string }>(
       response
@@ -279,8 +350,6 @@ export const postInsightsRequest = async (
           : "AI microservice is unavailable.",
       },
     };
-  } finally {
-    clearTimeout(timeout);
   }
 };
 
@@ -322,8 +391,6 @@ export const postReceiptExtractionRequest = async (
   payload: ReceiptExtractionMicroservicePayload
 ): Promise<ReceiptExtractionServiceResult> => {
   const baseUrl = getAiServiceBaseUrl();
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
 
   try {
     const body =
@@ -368,18 +435,20 @@ export const postReceiptExtractionRequest = async (
       });
     }
 
-    const response = await fetchThroughColdStart(() =>
-      fetch(`${baseUrl}/extract-receipt`, {
-        method: "POST",
-        headers:
-          payload.fileBuffer !== undefined
-            ? undefined
-            : {
-                "Content-Type": "application/json",
-              },
-        body,
-        signal: controller.signal,
-      })
+    const response = await fetchThroughColdStart(
+      (signal) =>
+        fetch(`${baseUrl}/extract-receipt`, {
+          method: "POST",
+          headers:
+            payload.fileBuffer !== undefined
+              ? undefined
+              : {
+                  "Content-Type": "application/json",
+                },
+          body,
+          signal,
+        }),
+      { budgetMs: DEFAULT_TIMEOUT_MS, label: "extract-receipt" }
     );
 
     console.info("[aiService] python receipt response status:", response.status);
@@ -415,7 +484,5 @@ export const postReceiptExtractionRequest = async (
           : "AI microservice is unavailable.",
       },
     };
-  } finally {
-    clearTimeout(timeout);
   }
 };

@@ -7,6 +7,7 @@ import {
   buildMockReceiptExtractionPayload,
   buildPersonalFinancialSummary,
   buildUploadedReceiptPayload,
+  getAiWarmState,
   postInsightsRequest,
   postReceiptExtractionRequest,
   warmUpAiService,
@@ -41,10 +42,14 @@ const buildValidationFields = (
  * Kicks off the microservice wake-up and returns immediately. The frontend
  * calls this on load so the (free-tier, spun-down) AI instance is already
  * booting by the time the user opens AI Insights or Smart Scan.
+ *
+ * Reports the *current* warm state rather than a fixed "warming": the ping
+ * outlives this response, so only `warm` means the microservice has actually
+ * answered a health check. Anything else tells the frontend to ask again.
  */
 export const warmUpAi = asyncHandler(async (_req: Request, res: Response) => {
   void warmUpAiService();
-  return res.status(202).json({ status: "warming" });
+  return res.status(202).json({ status: getAiWarmState() });
 });
 
 export const generateInsights = asyncHandler(
