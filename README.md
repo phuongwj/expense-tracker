@@ -7,7 +7,9 @@ AI-generated budgeting insights.
 
 **Live demo:** [Frontend URL](https://expense-tracker-app-7q38.onrender.com)
 
-> **Note:** Since the app is hosted on Render’s free tier, the first request after a period of inactivity may take up to a minute while the services wake up. A **“Warming up”** toast will appear while this happens — just wait a moment, no action is needed.
+> **Note:** The app is hosted on Render’s free tier, so services spin down after ~15 minutes of inactivity and the first request after that can take up to a minute. For the backend and frontend this resolves on its own — just wait.
+>
+> **The AI microservice has to be woken by hand.** Before using **AI Insights** or **Smart Scan**, open <https://expense-tracker-c3l4.onrender.com/health> in a new tab and wait until it returns `{"status":"ok"}` (up to a minute on the first request). Both features work normally once it does; until then they will report that the AI service is unavailable.
 
 ## Contents
 

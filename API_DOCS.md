@@ -1184,32 +1184,36 @@ Same as `GET /api/export/csv`, but for a group's transactions — and with the s
 
 All endpoints are under `/api/ai`. `/insights` and `/extract-receipt` require a valid access token; `/warmup` deliberately does not (see below). These endpoints don't generate AI output themselves — they build a request payload from the caller's own data and proxy it to the separate Python/FastAPI microservice (see [AI Microservice (Python/FastAPI)](#ai-microservice-pythonfastapi)) via `backend/src/ai/aiService.ts`, using `AI_SERVICE_URL` (default `http://127.0.0.1:8000`). The frontend only ever calls these backend routes — it never talks to the Python service directly.
 
-**Cold-start handling:** the Python microservice runs on Render's free tier and spins down after ~15 minutes idle, so the backend builds in both a warm-up path and retry logic:
+**Cold starts — the microservice must be woken manually.** The Python microservice runs on Render's free tier and spins down after ~15 minutes idle. A request arriving while it is down is rejected by Render's router with an *immediate* `502`/`503`/`504` rather than being held until the instance is ready, and a full boot takes considerably longer than any of the retry windows below. **Before calling `/insights` or `/extract-receipt`, open <https://expense-tracker-c3l4.onrender.com/health> in a browser and wait for `{"status":"ok"}`.** Until it does, both endpoints return `503`.
+
+The backend's cold-start handling reduces how often this bites but does not remove the manual step:
 - Each `/insights`/`/extract-receipt` call has a 90-second total budget (`DEFAULT_TIMEOUT_MS`) covering the whole call *including retries*, not per attempt.
-- `fetchThroughColdStart` in `aiService.ts` retries up to 2 times (3 attempts total, 6s apart) when the microservice is unreachable or returns `502`/`503`/`504` — the shape of a Render router response while the instance is still booting. A genuine 401/400/etc. from the microservice itself is not retried.
-- `warmUpAiService()` (also in `aiService.ts`) fire-and-forget pings the microservice's `GET /health` with its own 90s timeout, deduplicated so concurrent callers share one in-flight ping. The frontend triggers this on app load (`App.tsx`) and again on the Smart Scan page mount, via `POST /api/ai/warmup` below — so the instance is often already awake by the time a user reaches AI Insights or Smart Scan, rather than only starting to wake on their first real request.
-- The frontend also shows a "warming up" toast on the first backend request and first AI request of a page load, replaced with a "ready" success toast once that request resolves (`frontend/src/services/api.ts`, `toastBridge.ts`, `ToastContext.tsx`).
+- `fetchThroughColdStart` in `aiService.ts` retries up to 2 times (3 attempts total, 6s apart) when the microservice is unreachable or returns `502`/`503`/`504` — the shape of a Render router response while the instance is still booting. A genuine 401/400/etc. from the microservice itself is not retried. In practice this ~12s window only helps when the instance is already nearly up; it cannot cover a boot from cold.
+- `warmUpAiService()` (also in `aiService.ts`) fire-and-forget pings the microservice's `GET /health`, and the frontend triggers it on app load (`App.tsx`) and on the Smart Scan page mount via `POST /api/ai/warmup` below. This ping is a single attempt with no retry, so a spun-down instance answers it with an immediate `503` and the ping gives up without waking anything — it does **not** substitute for the manual step above.
+- The frontend shows a waiting toast on the first backend request and first AI request of a page load, replaced with a "ready" success toast once that request resolves (`frontend/src/services/api.ts`, `toastBridge.ts`, `ToastContext.tsx`).
 
 | Method | Endpoint                     | Description                                                      |
 | ------ | ------------------------------ | -------------------------------------------------------------------- |
-| POST   | `/api/ai/warmup`                | Fire-and-forget ping to wake up the AI microservice early            |
+| POST   | `/api/ai/warmup`                | Fire-and-forget ping at the AI microservice (does not reliably wake it) |
 | POST   | `/api/ai/insights`              | Build a personal financial summary and get back budgeting insights   |
 | POST   | `/api/ai/extract-receipt`       | Send a receipt image (or mock fields) and get back a draft transaction |
 
 ### POST `/api/ai/warmup`
 
-**Auth:** none required — intentional, so it's callable from the login screen (before the user has a token) to start booting the AI instance as early as possible.
+**Auth:** none required — intentional, so it's callable from the login screen (before the user has a token).
 
 **Request body:** none.
 
-**Behavior:** calls `warmUpAiService()`, which pings the microservice's `GET /health`, and returns immediately without waiting for that ping to resolve. Takes no input and returns no meaningful data — its only purpose is the side effect of waking the microservice.
+**Behavior:** calls `warmUpAiService()`, which fires a single `GET /health` at the microservice, and returns immediately without waiting for that ping to resolve. Takes no input and returns no meaningful data.
+
+> **This endpoint does not reliably wake a spun-down instance.** The ping is one attempt with no retry, so Render's immediate `503` for a sleeping instance makes it fail silently in exactly the case it was meant to cover. Wake the microservice by opening <https://expense-tracker-c3l4.onrender.com/health> directly and waiting for `{"status":"ok"}`.
 
 **Success (202):**
 ```json
 { "status": "warming" }
 ```
 
-There are no documented error responses — it always returns 202 regardless of whether the underlying ping succeeds.
+There are no documented error responses — it always returns 202 regardless of whether the underlying ping succeeds, so the response says nothing about whether the microservice is actually up.
 
 ### POST `/api/ai/insights`
 

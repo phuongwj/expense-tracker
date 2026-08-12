@@ -148,12 +148,20 @@ shapes, and Groq fallback behavior, and
 [API_DOCS.md's AI API (Backend Proxy)](API_DOCS.md#ai-api-backend-proxy)
 section for how the backend forwards requests to it.
 
-**Cold starts:** it runs on Render's free tier, which spins the instance
-down after ~15 min idle, so `aiService.ts` treats a cold instance as an
-expected case rather than a failure — `fetchThroughColdStart` retries an
+**Cold starts — woken manually:** it runs on Render's free tier, which
+spins the instance down after ~15 min idle. A request arriving while it is
+down gets an immediate `502`/`503`/`504` from Render's router rather than
+being held until the instance boots, and a boot takes longer than any
+retry window in the code. **The instance has to be woken by hand: open
+<https://expense-tracker-c3l4.onrender.com/health> and wait for
+`{"status":"ok"}` before using AI Insights or Smart Scan.**
+
+`aiService.ts` still treats a cold instance as an expected case rather
+than a failure — `fetchThroughColdStart` retries an
 `/insights`/`/extract-receipt` call up to twice (3 attempts, 6s apart) on
-`502`/`503`/`504`/unreachable, within a 90s total budget. There's also a
-dedicated `POST /api/ai/warmup` route (unauthenticated, fire-and-forget)
-that just pings the microservice's `/health` to start it booting before a
-real request needs it — see [Frontend](#frontend) above for where that
-gets called from.
+`502`/`503`/`504`/unreachable, within a 90s total budget — but that ~12s
+window only covers an instance that is already nearly up. The dedicated
+`POST /api/ai/warmup` route (unauthenticated, fire-and-forget, pinging the
+microservice's `/health`; see [Frontend](#frontend) above for where it is
+called from) is a single attempt with no retry, so a sleeping instance
+answers it with an immediate `503` and it wakes nothing.
