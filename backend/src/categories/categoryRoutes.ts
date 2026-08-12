@@ -35,7 +35,7 @@ router.post("/", requireAuth, validateBody(categorySchema), create);
  * PUT /api/categories/:id
  * Updates the user's category with the given ID.
  */
-router.put("/:id", requireAuth, validateBody(categorySchema), update);
+router.put("/:id", requireAuth, validateParams(categoryIdSchema), validateBody(categorySchema), update);
 
 /**
  * DELETE /api/categories/:id
