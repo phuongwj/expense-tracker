@@ -1,0 +1,11 @@
+# Applies to the backend image build (context: repo root).
+node_modules
+**/node_modules
+frontend
+python-microservice
+.git
+.env
+**/.env
+dist
+**/dist
+*.md

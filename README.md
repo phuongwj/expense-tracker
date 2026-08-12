@@ -1,347 +1,250 @@
 # Expense Tracker
 
-A full-stack expense tracking app built with React (frontend) and Express + PostgreSQL (backend).
+A full-stack expense tracker for individuals and groups. Track personal and
+shared expenses, split group costs and settle balances, import/export
+transactions as CSV, capture receipts with OCR-assisted extraction, and get
+AI-generated budgeting insights.
 
-## Getting started
+**Live demo:** [Frontend URL](https://expense-tracker-app-7q38.onrender.com)
 
-This repo uses npm workspaces, so the frontend and backend are separate packages managed from the monorepo root.
+> **Note:** The app is hosted on Render’s free tier, so services spin down after ~15 minutes of inactivity and the first request after that can take up to a minute. For the backend and frontend this resolves on its own — just wait.
+>
+> **The AI microservice has to be woken by hand.** Before using **AI Insights** or **Smart Scan**, open <https://expense-tracker-c3l4.onrender.com/health> in a new tab and wait until it returns `{"status":"ok"}` (up to a minute on the first request). Both features work normally once it does; until then they will report that the AI service is unavailable.
 
-1. Install dependencies from the repo root:
+## Contents
 
-```bash
-npm install
-```
+- [Overview](#overview)
+- [Tech stack](#tech-stack)
+- [Prerequisites for running the app locally](#prerequisites-for-running-the-app-locally)
+- [Project structure](#project-structure)
+- [Local setup with Docker](#local-setup-with-docker)
+- [Local setup without Docker](#local-setup-without-docker)
+- [Usage](#usage)
+- [Environment variables reference](#environment-variables-reference)
+- [API documentation](#api-documentation)
+- [Architecture notes](#architecture-notes)
 
-2. Start the backend:
+## Overview
 
-```bash
-cd backend
-npm run dev
-```
+The app is split into three runtime pieces that talk to each other over
+HTTP, plus a shared package of validation schemas [shared package of validation schemas](ARTIFACTS.md#shared-validation-package-packagesshared):
 
-3. Start the frontend:
+- **Backend** (Node/Express) — REST API, auth, and the PostgreSQL database.
+- **Frontend** (React/Vite) — the web UI.
+- **Python microservice** (FastAPI) — AI financial insights and receipt OCR
+  extraction, both via Groq. The backend calls this service; the frontend
+  never talks to it directly.
 
-```bash
-cd frontend
-npm run dev
-```
+Core features:
 
-You can also run either workspace from the root without changing directories:
+- **Users & groups** — JWT-based signup/login, create/join groups, shared
+  group transactions split equally or by custom amount, outstanding balance
+  tracking and settlements.
+- **Transactions** — create/edit/delete expense or income transactions,
+  default or custom categories, recurring transactions, spending
+  visualization.
+- **Import, capture & export** — CSV import with a pre-import preview,
+  receipt upload with OCR-assisted extraction into an editable draft
+  transaction, and filtered CSV export.
+- **AI insights** — the backend builds a spending summary and sends it to
+  the Python microservice, which asks Groq for budgeting advice
+  (personal warnings/suggestions, or group fairness/budgeting observations).
 
-```bash
-npm run -w backend dev
-npm run -w frontend dev
-```
+## Tech stack
 
-If you only want to run the frontend, you can do it the normal way from inside `frontend/`.
-The same is true for the backend from `backend/`.
+| Layer | Stack |
+| --- | --- |
+| Backend | Node.js + Express + TypeScript, raw SQL via [`pg`](https://node-postgres.com/) and [`node-pg-migrate`](https://github.com/salsita/node-pg-migrate) (no ORM) |
+| Frontend | React + TypeScript + Vite + Tailwind CSS, `react-hook-form` + Zod for forms |
+| AI microservice | Python + FastAPI, Groq (`llama-3.3-70b-versatile`) for insights, Groq Vision (`qwen/qwen3.6-27b`) for OCR |
+| Shared | Zod schemas shared between frontend and backend (`packages/shared`) |
+| Monorepo | npm workspaces (`backend`, `frontend`, `packages/*`) |
+| Local dev | Docker Compose runs PostgreSQL, backend, and the Python microservice; frontend runs on its own |
 
-## Folder structure
+## Prerequisites for running the app locally
+
+- **Docker Desktop** (recommended) — runs PostgreSQL, the backend, and the
+  Python microservice for you. See [Local setup with Docker](#local-setup-with-docker).
+- **Node.js** 20+ and **npm** 10+ — needed either way, to run the frontend
+  (it runs separately, not in Docker)
+- Optional, for real (non-fallback) AI responses:
+  - A **Groq API key** — used for both AI insights and Groq Vision OCR
+- Optional, only needed to actually send forgot-password emails:
+  - A **Resend API key** + verified sender domain
+- Not using Docker? See [Local setup without
+  Docker](#local-setup-without-docker) — you'll additionally need
+  **Python** 3.11+/`pip` and a local PostgreSQL 16 install.
+
+Everything above marked optional has safe fallback behavior — the app runs
+and is fully testable without those keys.
+
+## Project structure
 
 ```
 expense-tracker/
+  docker-compose.yml        # Runs postgres + backend + python-microservice
   packages/
-    shared/               # Shared Zod schemas used by both frontend and backend
+    shared/                 # Zod schemas shared by frontend and backend
       src/
-        auth.ts           # Auth input schemas (signup, login, forgot/reset password)
+        auth.ts             # e.g. signup, login, forgot/reset password
+        groups.ts           # e.g. create/join group
   backend/
-    migrations/           # Versioned SQL files, one per database change
+    Dockerfile
+    migrations/             # Versioned SQL files, one per database change
     src/
-      auth/               # Auth feature (signup, login, refresh, logout, password reset)
-      transactions/       # Transactions feature
-      groups/             # Groups feature
-      ...
-      middleware/         # Shared middleware used across features
-      config/             # Database pool, environment config
-    .env.example          # Template for your local environment variables
+      auth/                 # Signup, login, refresh, logout, password reset
+      transactions/         # Personal + group transactions, balances, settlements
+      groups/               # Create/join groups, members
+      categories/           # Default + custom categories
+      importExport/         # CSV import/export
+      ai/                   # Calls the Python microservice for insights/OCR
+      middleware/           # Auth, request validation, error handling
+      config/               # Database pool, environment config
+    .env.example            # Template for backend/.env
   frontend/
     src/
-      components/         # Reusable UI components
-      context/            # React context providers
-      pages/              # Page-level components
-      services/           # API client and request helpers
-  python-microservice/    # Python microservice package
+      components/           # Reusable UI components
+      context/              # React context providers (e.g. auth)
+      pages/                # Page-level components (routes)
+      services/             # API client and request helpers
+    .env.example            # Template for frontend/.env
+  python-microservice/
+    Dockerfile
+    app/
+      main.py               # FastAPI app, /health
+      insights.py           # /generate-insights
+      receipts.py           # /extract-receipt (OCR)
+    .env.example            # Template for python-microservice/.env
 ```
 
-Each backend feature gets its own folder under `src/` and follows the same file naming pattern: `<feature>Routes.ts`, `<feature>Controller.ts`, `<feature>Repository.ts`, `<feature>Schemas.ts`, `<feature>Model.ts`. For example, a transactions feature would live in `src/transactions/` with `transactionRoutes.ts`, `transactionController.ts`, and so on.
+Each backend feature (`auth/`, `transactions/`, `groups/`, etc.) follows
+the same `Routes → Schemas → Controller → Repository → Model` layering. See
+[Architecture notes](#architecture-notes) for how that pattern works, how
+the shared validation package works, and how database migrations work.
 
-The AI/OCR integration follows the same pattern in `backend/src/ai/`. The current backend AI endpoints are:
-- `POST /api/ai/insights`
-- `POST /api/ai/extract-receipt`
+## Local setup with Docker
 
-For Core Feature 3 demo work, the backend also includes a mock-backed `backend/src/importExport/` module with:
-- `POST /api/import/preview`
-- `POST /api/import/confirm`
-- `POST /api/export/preview`
-- `GET /api/export/csv`
+PostgreSQL, the backend, and the Python microservice run in Docker via
+`docker-compose.yml`. The frontend runs separately with `npm run dev`.
 
-These endpoints use in-memory storage only for demo purposes. They do not write to the real transaction database yet, and can be swapped to real transaction persistence once that schema is finalized.
+### 1. Configure environment files
 
-`POST /api/import/preview` supports two input formats:
-- raw JSON with `csvText`
-- `multipart/form-data` with one uploaded CSV file in field `file`
-
-The split keeps responsibilities clear:
-- **Routes** wire URLs to middleware and controller functions.
-- **Controllers** handle request/response logic and orchestrate calls.
-- **Repositories** are the only place that talks to the database.
-- **Schemas** define and validate the shape of incoming data.
-- **Models** hold the shared TypeScript types for that feature.
-
-
-### How the layers work together
-
-Every feature in the backend follows the same five-layer pattern. A request enters at the top and flows down; the response flows back up.
-
-```
-Routes -> Schema -> Controller -> Repository -> Model
+```bash
+cp backend/.env.example backend/.env
+cp python-microservice/.env.example python-microservice/.env
 ```
 
-**1. Routes**
+- At minimum, set `ACCESS_TOKEN_SECRET` in `backend/.env` to a long random value.
+- Everything else can stay as placeholders — Docker Compose overrides `DB_HOST`, `DATABASE_URL`, `AI_SERVICE_URL`, etc. to point containers at each other (see `docker-compose.yml`).
+- Fill in `GROQ_API_KEY` only if you want real AI responses instead of the safe fallback behavior.
+- Fill in `RESEND_API_KEY` only if you want real password-reset emails instead of the safe fallback behavior.
 
-**Wiring**. Maps HTTP methods and paths to handlers. Attaches middleware (see `backend/src/middleware/authMiddleware.ts`) like `validateBody()` or `requireAuth`.
+### 2. Start PostgreSQL, the backend, and the Python microservice
 
-**2. Schema**
+From the repo root:
 
-**Validation**. Zod schemas define what shape the request body must be. If it fails, the middleware returns 400 before the controller ever runs. Also exports TypeScript types via `z.infer<>`.
-
-**3. Controller**
-
-**Business logic**. The handler function. Reads validated input, calls repository functions, decides what status code to return. Each handler is wrapped in try/catch.
-
-**4.Repository**
-
-**Database access**. Raw SQL with parameterized queries (`$1`, `$2`). This is where snake_case columns get aliased to camelCase with `AS "camelCase"`.
-
-**5. Model**
-
-**Type definitions**. TypeScript interfaces that describe the shape of data in the app. The repository returns these types, the controller works with them.
-
-
-## Shared package (`packages/shared/`)
-
-The `packages/shared/` package holds Zod schemas that both the frontend and backend need. This ensures validation rules (field names, types, constraints, error messages) are defined in one place, so they can't drift out of sync.
-
-### What goes in shared
-
-**Input schemas** — schemas that validate what the user types into a form. These are used by the frontend (form validation with `react-hook-form`) and the backend (request body validation with `validateBody()` middleware). If both sides need the same validation, the schema belongs in shared.
-
-Currently in shared:
-- `signupSchema` — first name, last name, email, password
-- `loginSchema` — email, password
-- `forgotPasswordSchema` — email
-- `resetPasswordSchema` — email, 6-digit code, new password
-
-### What stays in the backend
-
-**Backend-only schemas** — schemas that validate things the frontend never touches, like URL params or query strings. For example, `deleteTransactionSchema` validates that `:id` is a valid UUID. The frontend doesn't run that check; it just sends the request.
-
-### How to move a schema to shared
-
-If you have a schema in your backend feature folder that the frontend also needs, here's how to move it:
-
-**1. Add the schema to a file in `packages/shared/src/`**
-
-Create a new file (or add to an existing one) based on the feature name:
-
-```ts
-// packages/shared/src/transactions.ts
-import { z } from "zod";
-
-export const createTransactionSchema = z.object({
-    type: z.enum(['expense', 'income']),
-    amount: z.number().positive("Transaction amount must be greater than zero."),
-    // ... rest of the schema
-});
-export type CreateTransactionInput = z.infer<typeof createTransactionSchema>;
+```bash
+docker compose up --build
 ```
 
-**2. Register the new file in `packages/shared/package.json`**
+This builds and starts three containers:
 
-Add an entry to the `exports` map so other packages can import it:
+- **postgres** — PostgreSQL 16, data persisted in a Docker volume
+- **backend** — runs pending migrations, then starts the Express dev
+  server (`tsx watch`) on `http://127.0.0.1:3000`
+- **python-microservice** — FastAPI with `--reload` on `http://127.0.0.1:8000`
 
-```json
-{
-  "exports": {
-    "./auth": "./src/auth.ts",
-    "./transactions": "./src/transactions.ts"
-  }
-}
-```
+Backend and microservice source files are mounted into their containers,
+so edits on your host hot-reload same as running them locally. Leave this
+running in its terminal; `Ctrl+C` stops all three. Next time, plain
+`docker compose up` is enough — `--build` is only needed after dependency
+changes (`package.json`, `requirements.txt`) or Dockerfile edits.
 
-**3. Update the backend's schema file to re-export**
+### 3. Install dependencies and start the frontend
 
-Replace the inline definition with a re-export from the shared package. Keep any backend-only schemas in place:
-
-```ts
-// backend/src/transactions/transactionSchemas.ts
-
-// Shared schemas — re-exported so existing imports don't break
-export {
-    createTransactionSchema,
-    getTransactionsSchema,
-} from "@expense-tracker/shared/transactions";
-
-export type {
-    CreateTransactionInput,
-    GetTransactionsInput,
-} from "@expense-tracker/shared/transactions";
-
-// Backend-only schemas — stay here
-export const deleteTransactionSchema = z.object({
-    id: z.string().uuid("A valid transaction id is required."),
-});
-```
-
-That's it — no `npm install` needed. The shared package is already symlinked via npm workspaces, so any new files you add to `packages/shared/src/` are picked up immediately.
-
-### How it works under the hood
-
-The project uses **npm workspaces**. The root `package.json` declares `backend`, `frontend`, and `packages/*` as workspaces. When you ran `npm install` during initial setup, npm created a symlink:
-
-```
-node_modules/@expense-tracker/shared → ../../packages/shared
-```
-
-> A **symlink** (symbolic link) is like a shortcut. Instead of copying the `packages/shared/` folder into `node_modules/`, npm creates a pointer that says "when someone imports `@expense-tracker/shared`, go look at `packages/shared/` instead." This means any changes you make in `packages/shared/src/` are picked up instantly — there's nothing to rebuild or reinstall.
-
-
-## API Documentation
-
-See [API_DOCS.md](API_DOCS.md) for full request/response docs for all endpoints.
-
-## Core Feature 3: Import / Export
-
-The current Core Feature 3 flow is wired to real backend endpoints from the frontend UI.
-
-### Implemented frontend-to-backend flow
-
-- `GET /import-csv` opens the CSV import page
-- `POST /api/import/preview` generates a real backend preview from uploaded CSV content
-- `POST /api/import/confirm` confirms selected valid rows and saves them to the authenticated user's PostgreSQL personal transactions
-- `GET /export` opens the export page
-- `POST /api/export/preview` generates a real backend export preview from the authenticated user's PostgreSQL personal transactions
-- `GET /api/export/csv` downloads a CSV file built from the authenticated user's PostgreSQL personal transactions
-
-### Current limitations
-
-- Import/export currently supports personal transactions only
-- Group import/export is not implemented
-- PDF export is not implemented on this branch
-- Imported rows create or reuse categories by name for the authenticated user
-- Export responses include a synthetic `source` field for frontend compatibility; transaction provenance is not yet persisted separately
-- PDF export is not implemented on this branch
-
-### How to test Core Feature 3
-
-#### 1. Start the backend
-
-From `backend/`:
+In a new terminal, from the repo root:
 
 ```bash
 npm install
-npm start
-```
-
-#### 2. Start the frontend
-
-From `frontend/`:
-
-```bash
-npm install
+cd frontend
+cp .env.example .env   # VITE_API_URL=http://localhost:3000/api by default
 npm run dev
 ```
 
-#### 3. Test import preview
+>`npm install` at the root installs the `frontend`, `backend`, and
+`packages/shared` npm workspaces together — running it here also gets you
+editor tooling for `backend/` and `packages/shared/` even though those two
+run inside Docker.
 
-1. Open the app and log in
-2. Go to `Transactions -> Import CSV`
-3. Upload a `.csv` file with required columns:
-   - `date`
-   - `description`
-   - `amount`
-   - `type`
-   - `category`
-4. The page calls `POST /api/import/preview`
-5. The UI should show:
-   - total row count
-   - valid rows
-   - invalid rows
-   - validation errors for rejected rows
+The frontend runs on `http://localhost:5173` by default.
 
-#### 4. Test import confirm
+### 4. Verify everything is running
 
-1. On the preview screen, leave valid rows selected or uncheck any rows you do not want to import
-2. Click `Import ... rows`
-3. The page calls `POST /api/import/confirm`
-4. The UI should show saved/skipped counts
-5. Imported rows should now exist in the PostgreSQL `transactions` table for the logged-in user
+- `http://127.0.0.1:3000` — backend (no route at `/`, but
+  `GET http://127.0.0.1:3000/api/auth/me` with a valid token should respond)
+- `http://127.0.0.1:8000/health` — Python microservice health check
+- `http://localhost:5173` — frontend; sign up, log in, and you should land
+  on the dashboard
 
-#### 5. Test export preview
+## Local setup without Docker
 
-1. Go to `Transactions -> Export`
-2. Use the available type, category, and date filters
-3. Click `Refresh preview`
-4. The page calls `POST /api/export/preview`
-5. The UI should show:
-   - row count
-   - total income
-   - total expenses
-   - net amount
-   - preview rows from the authenticated user's PostgreSQL personal transactions
+Use this if Docker isn't available to you, or you want direct control over
+each process (e.g. attaching a debugger). It assumes Node.js 20+/npm 10+
+are already installed (see [Prerequisites](#prerequisites-for-running-the-app-locally));
+Python and PostgreSQL are not, so step 1 covers installing those.
 
-#### 6. Test CSV download
+**1. Install Python 3.11+ and PostgreSQL 16** — skip either you already have:
 
-1. On the Export page, keep the format set to `CSV`
-2. Click `Download CSV`
-3. The page calls `GET /api/export/csv`
-4. A CSV file should download with real PostgreSQL-backed personal transaction rows
+macOS (Homebrew):
 
-### Notes for teammates
-
-- The import/export frontend now calls real backend endpoints instead of frontend mock rows
-- Import confirm, export preview, and CSV download are now PostgreSQL-backed for authenticated personal transactions
-- Import preview still does validation only and does not write to the database until confirm
-- Group import/export and PDF export still need separate implementation
-
-
-## Local Setup For AI/OCR Testing
-
-This section documents the current local setup needed to run and test Rohan's AI/OCR work end to end.
-
-### Required local services
-
-You need these four services running locally:
-
-1. PostgreSQL 16 in Docker
-2. Backend Express server
-3. Python FastAPI microservice
-4. Frontend Vite app
-
-### 1. Start PostgreSQL in Docker
-
-Windows PowerShell:
-
-```powershell
-docker run --name expense-tracker-postgres `
-  -e POSTGRES_USER=postgres `
-  -e POSTGRES_PASSWORD=postgres `
-  -e POSTGRES_DB=expense_tracker `
-  -p 5432:5432 `
-  -d postgres:16
+```bash
+brew install python@3.11
+brew install postgresql@16
+brew services start postgresql@16
 ```
 
-If you already created the container earlier, start it with:
+Windows:
 
-```powershell
-docker start expense-tracker-postgres
+- **Python:** download the installer from
+  [python.org/downloads/windows](https://www.python.org/downloads/windows/),
+  run it, and check **"Add python.exe to PATH"** before clicking Install.
+- **PostgreSQL:** download the installer from
+  [postgresql.org/download/windows](https://www.postgresql.org/download/windows/)
+  and run it. It installs the server plus `psql`/`createdb` and adds them to
+  PATH. During install you'll set a password for the `postgres` superuser —
+  remember it, it's your `DB_PASSWORD` below. Default port is `5432`.
+
+Verify both installed correctly:
+
+```bash
+python3 --version   # Windows: python --version
+psql --version
 ```
 
-### 2. Backend environment setup
+**2. Install dependencies** — from the repo root:
 
-Create `backend/.env` from `backend/.env.example`.
+```bash
+npm install
+```
 
-Example local values for the Docker database:
+**3. Create the database:**
+
+```bash
+createdb expense_tracker
+```
+
+This gives you a database at
+`postgresql://<user>:<password>@localhost:5432/expense_tracker`.
+
+**4. Configure the backend environment:**
+
+```bash
+cd backend
+cp .env.example .env
+```
+
+Fill in `backend/.env` — for a fresh local Postgres install with the
+default `postgres` user and no password:
 
 ```env
 DB_HOST=localhost
@@ -353,176 +256,138 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/expense_tracker
 
 ACCESS_TOKEN_SECRET=replace_with_a_long_random_secret
 AI_SERVICE_URL=http://127.0.0.1:8000
-
-RESEND_API_KEY=your_resend_api_key_here
-RESEND_FROM_EMAIL=noreply@example.com
 ```
 
-Other values such as `SALT_ROUNDS`, `ACCESS_TOKEN_EXPIRES_IN`, `REFRESH_TOKEN_TTL_DAYS`, and `PORT` can stay aligned with the example file unless you need to change them.
+See the [environment variables reference](#environment-variables-reference)
+for what every variable does.
 
-### 3. Run backend migrations
+**5. Run database migrations** — still from `backend/`:
 
-```powershell
-cd backend
-npm install
+```bash
 npm run migrate:up
 ```
 
-### 4. Start the backend
+**6. Start the backend:**
 
-```powershell
-cd backend
-npm start
-```
-
-The backend runs on `http://127.0.0.1:3000` by default.
-
-### 5. Python microservice environment setup
-
-Create `python-microservice/.env` from `python-microservice/.env.example`.
-
-Required variables:
-
-```env
-GROQ_API_KEY=your_groq_api_key_here
-GROQ_VISION_MODEL=qwen/qwen3.6-27b
-```
-
-Do not commit real API keys.
-
-### 6. Start the Python FastAPI microservice
-
-```powershell
-cd python-microservice
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-Copy-Item .env.example .env
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-The FastAPI service runs on `http://127.0.0.1:8000`.
-
-### 7. Start the frontend
-
-```powershell
-cd frontend
-npm install
+```bash
 npm run dev
 ```
 
-The frontend runs on `http://localhost:5173`.
+Runs on `http://127.0.0.1:3000` by default. You can also run it from the
+repo root without `cd`-ing in: `npm run -w backend dev`.
 
-## Testing Rohan's AI/OCR Work
+**7. Configure and start the frontend** — in a new terminal:
 
-### 1. Signup and login
-
-1. Open `http://localhost:5173`
-2. Create an account from the signup page
-3. Log in
-4. Confirm you are redirected into the app without auth errors
-
-### 2. AI Insights page
-
-1. Open the AI Insights page in the frontend
-2. Trigger insights refresh
-3. The frontend calls `POST /api/ai/insights`
-4. If Groq is configured, the Python service can generate Groq-backed insights
-5. If Groq is unavailable, the fallback insights response is still returned
-
-### 3. Smart Scan receipt image upload
-
-1. Open the Smart Scan page
-2. Upload a `.jpg`, `.jpeg`, `.png`, or `.webp` receipt image
-3. Review the extracted draft fields
-4. The frontend sends the image to `POST /api/ai/extract-receipt`
-5. The backend forwards the image to the Python service
-6. The Python service attempts Groq Vision OCR and falls back safely if needed
-
-### 4. Save the OCR draft transaction
-
-1. Review or edit the extracted amount, date, merchant, description, and type
-2. Click `Save transaction`
-3. Smart Scan sends the reviewed draft to `POST /api/transactions`
-4. On success, the frontend shows a success message and redirects to `/transactions`
-
-### 5. Verify the saved transaction
-
-#### Option A: Verify through the backend API
-
-Use the access token returned at login:
-
-```powershell
-$token = "YOUR_ACCESS_TOKEN"
-
-Invoke-RestMethod -Uri "http://127.0.0.1:3000/api/transactions" `
-  -Method GET `
-  -Headers @{
-    Authorization = "Bearer $token"
-  }
+```bash
+cd frontend
+cp .env.example .env
+npm run dev
 ```
 
-The response should include the saved transaction in the `transactions` array.
+Runs on `http://localhost:5173` by default.
 
-#### Option B: Verify directly in PostgreSQL
+**8. Configure and start the Python microservice** — in a new terminal:
 
-```powershell
-docker exec -it expense-tracker-postgres psql -U postgres -d expense_tracker
+```bash
+cd python-microservice
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+cp .env.example .env
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Then run:
+Runs on `http://127.0.0.1:8000`. Without `GROQ_API_KEY` set, insights and
+OCR requests still succeed — they return safe fallback responses instead
+of calling out to Groq.
 
-```sql
-SELECT id, user_id, type, amount, category_id, transaction_date, description
-FROM transactions
-ORDER BY created_at DESC;
-```
+Then verify each service the same way as under [Local setup with
+Docker](#4-verify-everything-is-running).
 
-## Known Limitations
+## Usage
 
-- The current Transactions page still uses mock/local frontend data, so a real backend-saved transaction may not appear visually there yet.
-- Smart Scan currently saves `categoryId` as `null` because a category lookup API is not available yet.
-- Groq Vision OCR has safe fallback behavior if the API key is missing, the model is unavailable, the request is rate-limited, or the model response cannot be parsed cleanly.
+Once all three services are running and you've signed up/logged in, the
+frontend exposes these pages (see `frontend/src/App.tsx` for the full route
+list — all routes below except signup/login/forgot-password require auth):
 
+| Page | Route | What it does |
+| --- | --- | --- |
+| Dashboard | `/dashboard` | Landing page after login |
+| Transactions | `/transactions` | List/create/edit/delete personal and group transactions |
+| Visualisation | `/visualisation` | Spending charts by week/month/semester |
+| Groups | `/groups` | Create or join a group (join via invite code) |
+| Group detail | `/groups/:id` | Group transactions, member balances, settlements |
+| Smart Scan | `/smart-scan` | Upload a receipt image, review the OCR-extracted draft, save as a transaction |
+| Import CSV | `/import-csv` | Upload a CSV, preview detected rows, confirm import |
+| Export | `/export` | Filter transactions and export as CSV |
+| AI Insights | `/ai-insights` | Personal or group budgeting insights generated via the Python microservice |
+| Settings | `/settings` | Account settings, custom categories |
 
-## Database migrations
+Auth (`/signup`, `/login`, `/forgot-password`) issues a JWT access token
+(short-lived) plus a refresh token (cookie-based); `requireAuth` middleware
+protects all authenticated routes on the backend, and group routes are
+additionally gated by `requireGroupMember`.
 
-We use [node-pg-migrate](https://github.com/salsita/node-pg-migrate) to manage database schema changes. Instead of modifying tables by hand, every change is a timestamped SQL file in `backend/migrations/`. Migrations run in order, so anyone can spin up the same database from scratch.
+## Environment variables reference
 
-### Setup
+### Backend (`backend/.env`)
 
-1. Make sure you have a PostgreSQL instance running locally.
-2. Copy the example environment file and fill in your local database credentials:
+> Under `docker compose up`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`,
+> `DB_DATABASE`, `DATABASE_URL`, `AI_SERVICE_URL`, and `CORS_ORIGINS` are
+> overridden by `docker-compose.yml` to point at the other containers —
+> whatever you put in `.env` for those is ignored under Docker. They still
+> matter for [Local setup without Docker](#local-setup-without-docker).
 
-   ```bash
-   cd backend
-   cp .env.example .env
-   ```
+| Variable | Purpose |
+| --- | --- |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_DATABASE` | Individual Postgres connection fields used by the app at runtime |
+| `DATABASE_URL` | Full Postgres connection string; this is what `node-pg-migrate` reads to apply migrations |
+| `ACCESS_TOKEN_SECRET` | Secret used to sign JWT access tokens — use a long random value, never commit a real one |
+| `SALT_ROUNDS` | bcrypt cost factor for password hashing (10–12 is typical) |
+| `ACCESS_TOKEN_EXPIRES_IN` | JWT access token lifetime (e.g. `15m`) |
+| `REFRESH_TOKEN_TTL_DAYS` | Refresh token lifetime in days |
+| `RESET_TOKEN_TTL_MINUTES` | How long a forgot-password reset code stays valid |
+| `PORT` | Port the Express server listens on (default `3000`) |
+| `AI_SERVICE_URL` | Base URL of the Python microservice, no trailing slash (default `http://127.0.0.1:8000`) |
+| `RESEND_API_KEY`, `RESEND_FROM_EMAIL` | Used to send forgot-password emails via [Resend](https://resend.com). Left as placeholders, forgot-password requests still return success but no email is actually sent — see the note below |
 
-   The `DATABASE_URL` in `.env` is what `node-pg-migrate` reads to connect. Point it at your local Postgres instance.
+> **Forgot-password note:** with a placeholder `RESEND_API_KEY`, the reset
+> flow doesn't throw — `authController.ts` doesn't check the SDK's error
+> return — so the request appears to succeed with no email delivered. To
+> test it for real, either configure a real Resend key + verified domain,
+> or temporarily log the generated OTP in `forgotPassword` during local dev.
 
-3. Install dependencies and run the migrations:
+### Frontend (`frontend/.env`)
 
-   ```bash
-   npm install
-   npm run migrate:up
-   ```
+| Variable | Purpose |
+| --- | --- |
+| `VITE_API_URL` | Base URL of the backend API (default `http://localhost:3000/api`). Baked in at build time by Vite — changing it requires a rebuild, not just an env edit |
 
-   This applies every migration file that hasn't been run yet, creating the tables your local database needs.
+### Python microservice (`python-microservice/.env`)
 
-### Commands
+| Variable | Purpose |
+| --- | --- |
+| `SERVICE_NAME`, `APP_VERSION`, `ENVIRONMENT` | Cosmetic metadata, surfaced on `/health` |
+| `HOST`, `PORT` | Bind address/port for the uvicorn server (default `0.0.0.0:8000`) |
+| `LOG_LEVEL` | Logging verbosity (e.g. `INFO`, `WARNING`) |
+| `GROQ_API_KEY` | Enables real Groq-backed insights and Groq Vision OCR. Without it, requests return safe fallback responses instead of failing |
+| `GROQ_VISION_MODEL` | Groq vision model used for receipt OCR (default `qwen/qwen3.6-27b`) |
+| `GEMINI_API_KEY` | Present in `.env.example` but not currently read anywhere in `app/*.py` — safe to leave blank |
+| `OCR_PROVIDER` | Present in `.env.example` but not currently read anywhere in `app/*.py` — safe to leave blank |
 
-Run these from the `backend/` directory:
+Never commit real API keys — all three `.env` files are gitignored;
+only the `.env.example` templates are checked in.
 
-| Command                                 | What it does                                                                                   |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `npm run migration:create -- <name>`    | Create a new empty migration file. Example: `npm run migration:create -- 002-transactions`     |
-| `npm run migrate:up`                    | Apply all pending migrations (runs the Up section of each file that hasn't run yet).           |
-| `npm run migrate:down`                  | Roll back the **single most recent** migration (runs its Down section). Run it multiple times to roll back further. |
+## API documentation
 
-### Rules
+See [API_DOCS.md](API_DOCS.md) for request/response details on individual
+endpoints. 
 
-- **Never edit a migration that's already been merged.** Once a migration is on `main` and other people have run it, their databases already have that version applied. If you need to change something, write a new migration.
-- **Always fill in the Down section.** Every migration has an Up (apply) and Down (rollback) section. The Down section should undo exactly what the Up section did, so `migrate:down` works cleanly.
-- **Keep migrations small and focused.** One migration per logical change (add a table, add a column, create an index) makes rollbacks predictable.
-- **Connection comes from `.env`.** Everyone runs migrations against their own local database. Never hardcode connection strings in migration files.
+## Architecture notes
+
+See [ARTIFACTS.md](ARTIFACTS.md) for a deeper look at how each part of the
+app is put together internally: the backend's layered
+`Routes → Schemas → Controller → Repository → Model` pattern, how the
+shared validation package (`packages/shared`) works and how to add a new
+schema to it, the frontend's folder organization, how database migrations
+work, and the AI microservice.
