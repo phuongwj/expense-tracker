@@ -54,8 +54,12 @@ export const computeNetBalances = (splitRows: BalanceRow[], settlementRows: Bala
 export const getGroupBalances = asyncHandler (async (req: Request<{ groupId: string }>, res: Response) => {
     const groupId = req.params.groupId;
     const userId = req.userId!;
-    const splitRows = await getGroupSplitsForUser(groupId, userId);
-    const settlementRows = await getGroupSettlementsForUser(groupId, userId);
+    //The splits and settlements lookups don't depend on each other, so both are
+    //started together and awaited as a pair rather than one after the other.
+    const [splitRows, settlementRows] = await Promise.all([
+        getGroupSplitsForUser(groupId, userId),
+        getGroupSettlementsForUser(groupId, userId),
+    ]);
 
     const currentBalances = computeNetBalances(splitRows, settlementRows, userId);
 
@@ -82,8 +86,11 @@ export const getGroupBalances = asyncHandler (async (req: Request<{ groupId: str
 export const getGlobalBalances = asyncHandler (async (req: Request, res: Response) => {
     const userId = req.userId!;
 
-    const splitRows = await getAllSplitsForUser(userId);
-    const settlementRows = await getAllSettlementsForUser(userId);
+    //Same as above: two independent lookups issued together instead of sequentially.
+    const [splitRows, settlementRows] = await Promise.all([
+        getAllSplitsForUser(userId),
+        getAllSettlementsForUser(userId),
+    ]);
 
     const net = computeNetBalances(splitRows, settlementRows, userId);
 
