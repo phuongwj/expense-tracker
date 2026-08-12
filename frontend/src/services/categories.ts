@@ -18,3 +18,13 @@ export async function createCategory(name: string): Promise<Category> {
 
   return response.data
 }
+
+export async function renameCategory(id: string, name: string): Promise<Category> {
+  const response = await api.put(`/categories/${id}`, { name })
+
+  return response.data
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  await api.delete(`/categories/${id}`)
+}

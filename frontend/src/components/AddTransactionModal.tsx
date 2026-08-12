@@ -1,7 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import Modal from './Modal'
 import { createPersonalTransaction } from '../services/transactions'
-import { getCategories, createCategory, type Category } from "../services/categories"
+import {
+  getCategories,
+  createCategory,
+  renameCategory,
+  deleteCategory,
+  type Category,
+} from "../services/categories"
 import { getErrorMessage, SUPPORT_EMAIL } from '../utils/errors'
 
 export default function AddTransactionModal({
@@ -24,6 +30,12 @@ export default function AddTransactionModal({
   const [newCategoryName, setNewCategoryName] = useState('')
   const [isSavingCategory, setIsSavingCategory] = useState(false)
   const [categoryFormError, setCategoryFormError] = useState<string | null>(null)
+  const [isManagingCategories, setIsManagingCategories] = useState(false)
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
+  const [editingCategoryName, setEditingCategoryName] = useState('')
+  const [isRenamingCategory, setIsRenamingCategory] = useState(false)
+  const [pendingDeleteCategory, setPendingDeleteCategory] = useState<Category | null>(null)
+  const [isDeletingCategory, setIsDeletingCategory] = useState(false)
   const [recurring, setRecurring] = useState(false)
   const [repeats, setRepeats] = useState('Monthly')
   const [formError, setFormError] = useState<string | null>(null)
@@ -64,19 +76,31 @@ export default function AddTransactionModal({
     setIsAddingCategory(false)
     setNewCategoryName('')
     setCategoryFormError(null)
+    setIsManagingCategories(false)
+    setEditingCategoryId(null)
+    setEditingCategoryName('')
+    setPendingDeleteCategory(null)
     onClose()
+  }
+
+  // Default categories (userId === null) are shared by every account, so the
+  // backend only allows renaming/deleting the ones this user created.
+  const isCustomCategory = (category: Category) => category.userId !== null
+
+  const validateCategoryName = (name: string, ignoreId?: string): string | null => {
+    if (!name) return 'Please enter a category name.'
+    if (categories.some((c) => c.id !== ignoreId && c.name.toLowerCase() === name.toLowerCase())) {
+      return 'You already have a category with this name.'
+    }
+    return null
   }
 
   const handleAddCategory = async () => {
     const trimmedName = newCategoryName.trim()
+    const validationError = validateCategoryName(trimmedName)
 
-    if (!trimmedName) {
-      setCategoryFormError('Please enter a category name.')
-      return
-    }
-
-    if (categories.some((c) => c.name.toLowerCase() === trimmedName.toLowerCase())) {
-      setCategoryFormError('You already have a category with this name.')
+    if (validationError) {
+      setCategoryFormError(validationError)
       return
     }
 
@@ -93,6 +117,64 @@ export default function AddTransactionModal({
       setCategoryFormError(getErrorMessage(err, `Unable to create this category right now. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
     } finally {
       setIsSavingCategory(false)
+    }
+  }
+
+  const startRenamingCategory = (category: Category) => {
+    setCategoryFormError(null)
+    setPendingDeleteCategory(null)
+    setIsAddingCategory(false)
+    setEditingCategoryId(category.id)
+    setEditingCategoryName(category.name)
+  }
+
+  const cancelRenamingCategory = () => {
+    setEditingCategoryId(null)
+    setEditingCategoryName('')
+  }
+
+  const handleRenameCategory = async (category: Category) => {
+    const trimmedName = editingCategoryName.trim()
+    const validationError = validateCategoryName(trimmedName, category.id)
+
+    if (validationError) {
+      setCategoryFormError(validationError)
+      return
+    }
+
+    if (trimmedName === category.name) {
+      cancelRenamingCategory()
+      return
+    }
+
+    setCategoryFormError(null)
+    setIsRenamingCategory(true)
+
+    try {
+      const updated = await renameCategory(category.id, trimmedName)
+      setCategories((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+      cancelRenamingCategory()
+    } catch (err) {
+      setCategoryFormError(getErrorMessage(err, `Unable to rename this category right now. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
+    } finally {
+      setIsRenamingCategory(false)
+    }
+  }
+
+  const handleDeleteCategory = async (category: Category) => {
+    setCategoryFormError(null)
+    setIsDeletingCategory(true)
+
+    try {
+      await deleteCategory(category.id)
+      setCategories((prev) => prev.filter((c) => c.id !== category.id))
+      setCategoryId((prev) => (prev === category.id ? null : prev))
+      setPendingDeleteCategory(null)
+    } catch (err) {
+      setPendingDeleteCategory(null)
+      setCategoryFormError(getErrorMessage(err, `Unable to delete this category right now. Please try again, or contact ${SUPPORT_EMAIL} if the problem persists.`))
+    } finally {
+      setIsDeletingCategory(false)
     }
   }
 
@@ -203,7 +285,30 @@ export default function AddTransactionModal({
       </Field>
 
       <div className="mb-4">
-        <label className="label" id="tx-category-label">Category</label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="label !mb-0" id="tx-category-label">Category</label>
+          {categories.some(isCustomCategory) && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsManagingCategories((managing) => !managing)
+                cancelRenamingCategory()
+                setPendingDeleteCategory(null)
+                setCategoryFormError(null)
+              }}
+              className="text-xs font-medium text-[#2D5240] hover:underline"
+            >
+              {isManagingCategories ? 'Done' : 'Manage'}
+            </button>
+          )}
+        </div>
+
+        {isManagingCategories && (
+          <p className="text-xs text-gray-400 mb-2">
+            Rename or delete the categories you created. Default categories can't be changed.
+          </p>
+        )}
+
         <div className="flex flex-wrap gap-2" role="group" aria-labelledby="tx-category-label">
           {categories.length === 0 && !isAddingCategory && (
             <p className="text-sm text-gray-400">
@@ -211,20 +316,96 @@ export default function AddTransactionModal({
             </p>
           )}
 
-          {categories.map((c) => (
-            <button
-              type="button"
-              key={c.id}
-              onClick={() => setCategoryId(c.id)}
-              className={`px-3 py-2 rounded-xl border text-sm flex flex-col items-center gap-1 min-w-[64px] ${
-                categoryId === c.id ? 'border-[#3D6B4F] bg-[#EDF4EE] text-[#2D5240]' : 'border-gray-200 text-gray-600'
-              }`}
-            >
-              {c.name}
-            </button>
-          ))}
+          {categories.map((c) =>
+            editingCategoryId === c.id ? (
+              <div key={c.id} className="flex gap-2 w-full">
+                <input
+                  autoFocus
+                  value={editingCategoryName}
+                  onChange={(e) => setEditingCategoryName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      void handleRenameCategory(c)
+                    }
+                    if (e.key === 'Escape') {
+                      cancelRenamingCategory()
+                    }
+                  }}
+                  aria-label={`New name for ${c.name}`}
+                  maxLength={100}
+                  disabled={isRenamingCategory}
+                  className="input"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleRenameCategory(c)}
+                  disabled={isRenamingCategory}
+                  className="h-11 px-4 rounded-xl bg-[#3D6B4F] text-white text-sm font-semibold hover:bg-[#2D5240] disabled:opacity-50 shrink-0"
+                >
+                  {isRenamingCategory ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelRenamingCategory}
+                  disabled={isRenamingCategory}
+                  className="h-11 px-4 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 shrink-0"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : isManagingCategories ? (
+              <div
+                key={c.id}
+                className={`px-3 py-2 rounded-xl border text-sm flex items-center gap-2 min-w-[64px] ${
+                  isCustomCategory(c) ? 'border-gray-200 text-gray-600' : 'border-gray-100 text-gray-400'
+                }`}
+              >
+                <span>{c.name}</span>
+                {isCustomCategory(c) ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => startRenamingCategory(c)}
+                      aria-label={`Rename ${c.name}`}
+                      title={`Rename ${c.name}`}
+                      className="text-xs text-gray-500 hover:text-[#2D5240]"
+                    >
+                      ✎
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCategoryFormError(null)
+                        cancelRenamingCategory()
+                        setPendingDeleteCategory(c)
+                      }}
+                      aria-label={`Delete ${c.name}`}
+                      title={`Delete ${c.name}`}
+                      className="text-xs text-gray-500 hover:text-red-600"
+                    >
+                      ✕
+                    </button>
+                  </>
+                ) : (
+                  <span className="text-[10px] uppercase tracking-wide text-gray-300">Default</span>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                key={c.id}
+                onClick={() => setCategoryId(c.id)}
+                className={`px-3 py-2 rounded-xl border text-sm flex flex-col items-center gap-1 min-w-[64px] ${
+                  categoryId === c.id ? 'border-[#3D6B4F] bg-[#EDF4EE] text-[#2D5240]' : 'border-gray-200 text-gray-600'
+                }`}
+              >
+                {c.name}
+              </button>
+            )
+          )}
 
-          {!isAddingCategory && (
+          {!isAddingCategory && !editingCategoryId && (
             <button
               type="button"
               onClick={() => setIsAddingCategory(true)}
@@ -234,6 +415,33 @@ export default function AddTransactionModal({
             </button>
           )}
         </div>
+
+        {pendingDeleteCategory && (
+          <div className="mt-2 p-3 rounded-xl bg-red-50 border border-red-200">
+            <p className="text-sm text-red-700 mb-2">
+              Delete "{pendingDeleteCategory.name}"? This can't be undone, and it won't work if a
+              transaction is still using it.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => void handleDeleteCategory(pendingDeleteCategory)}
+                disabled={isDeletingCategory}
+                className="h-9 px-3 rounded-lg bg-red-700 text-white text-sm font-semibold hover:bg-red-800 disabled:opacity-50"
+              >
+                {isDeletingCategory ? 'Deleting...' : 'Yes, delete'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingDeleteCategory(null)}
+                disabled={isDeletingCategory}
+                className="h-9 px-3 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {isAddingCategory && (
           <div className="mt-2">
@@ -249,6 +457,8 @@ export default function AddTransactionModal({
                   }
                 }}
                 placeholder="e.g. Textbooks"
+                aria-label="New category name"
+                maxLength={100}
                 className="input"
                 disabled={isSavingCategory}
               />
@@ -273,10 +483,11 @@ export default function AddTransactionModal({
                 Cancel
               </button>
             </div>
-            {categoryFormError && (
-              <p className="mt-1.5 text-xs text-red-600">{categoryFormError}</p>
-            )}
           </div>
+        )}
+
+        {categoryFormError && (
+          <p role="alert" className="mt-1.5 text-xs text-red-600">{categoryFormError}</p>
         )}
       </div>
 

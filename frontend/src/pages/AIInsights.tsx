@@ -99,22 +99,15 @@ export default function AIInsights() {
     >
       <div className="bg-[#2D5240] rounded-2xl p-6 mb-6 text-white">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-          <div className="text-xs uppercase tracking-wide text-white/60">AI Summary · Current Demo</div>
+          <div className="text-xs uppercase tracking-wide text-white/60">AI Summary</div>
           {insights && (
             <span className={`text-xs font-semibold rounded px-2 py-1 ${riskStyle.className}`}>
               {riskStyle.label}
             </span>
           )}
         </div>
-        <div className="text-2xl font-bold mb-1">
+        <div className="text-2xl font-bold">
           {isLoading ? 'Generating your financial insight summary...' : insights?.summary ?? 'AI insights are ready when requested.'}
-        </div>
-        <div className="text-white/70 text-sm">
-          {isLoading
-            ? 'We are preparing a student-friendly summary from the backend fallback insights.'
-            : insights
-            ? 'These notes come from the protected AI insights endpoint using the current fallback summary.'
-            : 'Refresh insights to request a new summary from the backend.'}
         </div>
       </div>
 
